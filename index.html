@@ -474,9 +474,11 @@ function parseOrgXlsx(buf){
     const orgT = after(/^ปัจจัยเสี่ยงระดับองค์กร$/), causeT = after(/^สาเหตุความเสี่ยง/);
     if (!orgT || !causeT) continue;
     const [code, ...name] = orgT.split(' '), [key, ...cname] = causeT.split(' ');
-    if (!orgs.has(code)) orgs.set(code, {code, name: name.join(' '), period: after(/^ผลการดำเนินงาน$/), causes: []});
+    if (!orgs.has(code)) orgs.set(code, {code, name: name.join(' '), period: after(/^ผลการดำเนินงาน$/), strategy: after(/^ยุทธศาสตร์/), causes: []});
     const org = orgs.get(code);
+    const cell = re => { const p = find(re); return p ? rows[p[0]][p[1]].replace(re, '').replace(/^\s*[:：]\s*/, '') : ''; };
     org.causes.push({key, name: cname.join(' '), owner: after(/^เจ้าของปัจจัยเสี่ยง/),
+      ra: cell(/^Risk Appetite/i), rt: cell(/^Risk Tolerance/i),
       before: level(/ระดับความเสี่ยงก่อนบริหาร/), after: level(/ระดับความเสี่ยงหลังบริหาร/), sheet});
   }
   return [...orgs.values()];
@@ -617,10 +619,7 @@ function stats(n){
 const CW = 312, CH = 66, RW = 260, GAP_X = 70, GAP_Y = 14;
 const svg = d3.select('#svg');
 const viewport = svg.append('g');
-const gLanes = viewport.append('g'), gLinks = viewport.append('g'), gNodes = viewport.append('g');
-const COLS = ['ปัจจัยเสี่ยงองค์กร', 'สาเหตุความเสี่ยง', 'ปัจจัยเสี่ยงระดับสายงาน', 'ปัจจัยเสี่ยงระดับส่วนงาน', 'ปัจจัยเสี่ยงระดับหน่วยงาน'];
-const LANE_HEAD = 56, LANE_PAD = 18;
-const zoom = d3.zoom().scaleExtent([0.08, 2.5]).on('zoom', e => viewport.attr('transform', e.transform));
+const gLanes = viewport.append('g'), gLinks = viewport.append('g'), gNodes = viewport.append('g');const zoom = d3.zoom().scaleExtent([0.08, 2.5]).on('zoom', e => viewport.attr('transform', e.transform));
 svg.call(zoom).on('dblclick.zoom', null);
 
 const measureCtx = document.createElement('canvas').getContext('2d');
@@ -636,6 +635,8 @@ const lv = k => LEVELS[k];
 
 let layoutRoot = null;
 function render(animateFrom){
+  if (state.view.type === 'org'){ renderOrg(); return; }
+  gLanes.selectAll('*').remove(); gLinks.selectChildren(':not(.link)').remove(); gNodes.selectChildren(':not(g.node), .tnode').remove();
   const vis = visibleSet();
   const kids = n => {
     const ch = vis ? n.children.filter(c => vis.has(c.id)) : n.children;
@@ -644,7 +645,6 @@ function render(animateFrom){
   const h = d3.hierarchy(state.view, kids);
   d3.tree().nodeSize([CH + GAP_Y, CW + GAP_X]).separation((a, b) => a.parent === b.parent ? 1 : 1.25)(h);
   layoutRoot = h;
-  drawLanes(h);
   const nodes = h.descendants(), links = h.links();
   const src = animateFrom && nodes.find(n => n.data.id === animateFrom.id) || h;
   // Animate only on expand/collapse; otherwise apply final positions synchronously (export relies on that).
@@ -655,7 +655,7 @@ function render(animateFrom){
   gNodes.selectAll('g.node').interrupt('layout');
   gLinks.selectAll('path').interrupt('layout');
 
-  T(gLinks.selectAll('path').data(links, d => d.target.data.id).join(
+  T(gLinks.selectAll('path.link').data(links, d => d.target.data.id).join(
     enter => enter.append('path').attr('class', 'link').attr('d', () => linkPath(src, src)),
     update => update, leave
   ).attr('stroke', d => linkColor(d.target.data)).attr('opacity', d => vis && !matches(d.target.data) && d.target.data.type === 'risk' ? .35 : .7))
@@ -675,31 +675,203 @@ function linkPath(s, t){
   const sx = s.y + nodeWidth(s.data), sy = s.x, tx = t.y, ty = t.x, mx = (sx + tx) / 2;
   return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}` + (t.data && t.data.type === 'gap' ? `H${tx + CW}` : '');
 }
-// Column swimlanes with headers, plus a dashed band around each cause's branch (org view only).
-function laneBox(h){
-  const ns = h.descendants();
-  return {top: d3.min(ns, d => d.x) - CH / 2 - LANE_HEAD - LANE_PAD, bottom: d3.max(ns, d => d.x) + CH / 2 + LANE_PAD,
-    left: -LANE_PAD, right: (COLS.length - 1) * (CW + GAP_X) + CW + LANE_PAD};
-}
-function drawLanes(h){
-  gLanes.selectAll('*').remove();
-  if (state.view.type !== 'org') return;
-  const b = laneBox(h);
-  COLS.forEach((label, i) => {
-    const x = i * (CW + GAP_X) - LANE_PAD, w = CW + LANE_PAD * 2, org = i < 2;
-    gLanes.append('rect').attr('x', x).attr('y', b.top).attr('width', w).attr('height', b.bottom - b.top).attr('rx', 14)
-      .attr('fill', org ? '#e8eefc' : '#eef1f5');
-    gLanes.append('rect').attr('x', x).attr('y', b.top).attr('width', w).attr('height', LANE_HEAD - 12).attr('rx', 14)
-      .attr('fill', org ? '#0b2a5b' : '#334155');
-    gLanes.append('text').attr('x', x + w / 2).attr('y', b.top + 28).attr('text-anchor', 'middle').attr('fill', '#fff')
-      .attr('font-size', 14).attr('font-weight', 600).text(label);
-  });
-  for (const c of h.children || []){
-    const xs = c.descendants().map(d => d.x);
-    gLanes.append('rect').attr('x', CW + GAP_X - LANE_PAD / 2).attr('y', d3.min(xs) - CH / 2 - 7)
-      .attr('width', b.right - (CW + GAP_X) - LANE_PAD / 2).attr('height', d3.max(xs) - d3.min(xs) + CH + 14).attr('rx', 12)
-      .attr('fill', 'none').attr('stroke', '#94a3b8').attr('stroke-dasharray', '5 4');
+/* ---------- Org view: top-down swimlanes (องค์กร → สาเหตุ → สายงาน → ส่วนงาน → หน่วยงาน) ---------- */
+
+const TD = {lab: 132, cw: 210, ch: 82, pad: 22, gapSlot: 14, gapLine: 34, gapCause: 70, stack: 8, indent: 18, causeMin: 300, rows: 6};
+const LANE_LABELS = [['ปัจจัยเสี่ยง', 'องค์กร'], ['สาเหตุ', 'ความเสี่ยง'], ['ปัจจัยเสี่ยง', 'ระดับสายงาน'], ['ปัจจัยเสี่ยง', 'ระดับส่วนงาน'], ['ปัจจัยเสี่ยง', 'ระดับหน่วยงาน']];
+const LINK_INK = '#94a3b8';
+const wordSeg = new Intl.Segmenter('th', {granularity: 'word'});
+// Wraps on Thai word boundaries so lines never split inside a word or before a vowel/tone mark.
+// firstW lets the first line stop short of a corner badge.
+function wrapLines(text, px, weight, maxW, max, firstW = maxW){
+  measureCtx.font = `${weight} ${px}px ${getComputedStyle(document.body).fontFamily}`;
+  const words = [...wordSeg.segment(text)].map(s => s.segment), lines = [];
+  const widthOf = i => i ? maxW : firstW;
+  let cur = '';
+  for (let i = 0; i < words.length; i++){
+    if (!cur.trim() || measureCtx.measureText(cur + words[i]).width <= widthOf(lines.length)){ cur += words[i]; continue; }
+    lines.push(cur.trim()); cur = words[i];
+    if (lines.length === max - 1){ cur += words.slice(i + 1).join(''); break; }
   }
+  if (cur.trim()) lines.push(cur.trim());
+  return lines.map((l, i) => fit(l, px, weight, widthOf(i)));
+}
+const leafOf = n => { while (n.type === 'gap') n = n.children[0]; return n; };
+// One slot per ส่วนงาน (its หน่วยงาน stacked below); หน่วยงาน hanging directly off a สายงาน share one slot.
+function slotsOf(line, ok){
+  const slots = [], direct = [];
+  for (const ch of line.children.filter(ok)){
+    if (ch.type === 'gap'){ const u = leafOf(ch); if (ok(u)) direct.push(u); }
+    else slots.push({sec: ch, units: ch.children.filter(ok)});
+  }
+  if (direct.length) slots.push({sec: null, units: direct});
+  return slots;
+}
+
+function renderOrg(){
+  const vis = visibleSet(), ok = n => !vis || vis.has(n.id);
+  gLanes.selectAll('*').remove(); gLinks.selectAll('*').remove(); gNodes.selectAll('*').remove();
+  layoutRoot = null; state.pos = new Map();
+  const org = state.view;
+  const causes = org.children.filter(c => !state.onlyCause || c.id === state.onlyCause);
+
+  // Horizontal: slots left → right, grouped by สายงาน, then by cause.
+  let cx = TD.lab + TD.pad;
+  const blocks = causes.map((c, ci) => {
+    if (ci) cx += TD.gapCause - TD.gapSlot;
+    const left = cx, lines = [];
+    c.children.filter(ok).forEach((ln, li) => {
+      if (li) cx += TD.gapLine - TD.gapSlot;
+      const slots = slotsOf(ln, ok);
+      if (!slots.length) slots.push({sec: null, units: []});
+      // Long หน่วยงาน stacks wrap into extra columns so the bottom lane stays a page-friendly height.
+      for (const s of slots){ s.x = cx; s.cols = Math.max(1, Math.ceil(s.units.length / TD.rows)); cx += s.cols * (TD.cw + TD.gapSlot); }
+      lines.push({n: ln, slots, mid: (slots[0].x + cx - TD.gapSlot) / 2});
+    });
+    if (cx - TD.gapSlot - left < TD.causeMin) cx = left + TD.causeMin + TD.gapSlot;
+    return {n: c, left, right: cx - TD.gapSlot, lines};
+  });
+  const W = cx - TD.gapSlot + TD.pad;
+
+  // Vertical: lane heights fit their tallest content.
+  const stackH = k => k ? k * TD.ch + (k - 1) * TD.stack : TD.ch;
+  const maxUnits = Math.min(TD.rows, d3.max(blocks.flatMap(b => b.lines.flatMap(l => l.slots.map(s => s.units.length)))) || 0);
+  const cardH = [100, 112, TD.ch, TD.ch, stackH(maxUnits)];
+  const laneH = cardH.map(h => h + TD.pad * 2), laneY = [0];
+  for (const h of laneH) laneY.push(laneY[laneY.length - 1] + h);
+  const H = laneY[5], top = i => laneY[i] + TD.pad;
+  state.box = {x: 0, y: 0, width: W, height: H};
+
+  // Lanes and row labels.
+  laneH.forEach((h, i) => {
+    gLanes.append('rect').attr('x', 0).attr('y', laneY[i]).attr('width', W).attr('height', h).attr('fill', i % 2 ? '#f8fafc' : '#ffffff');
+    gLanes.append('line').attr('x1', 0).attr('x2', W).attr('y1', laneY[i + 1]).attr('y2', laneY[i + 1]).attr('stroke', '#e2e8f0');
+    gLanes.append('rect').attr('x', 0).attr('y', laneY[i]).attr('width', TD.lab).attr('height', h).attr('fill', i < 2 ? '#0b2a5b' : '#1e3a5f');
+    const t = gLanes.append('text').attr('x', TD.lab / 2).attr('y', laneY[i] + h / 2 - 4).attr('text-anchor', 'middle').attr('fill', '#fff').attr('font-size', 13).attr('font-weight', 600);
+    t.append('tspan').text(LANE_LABELS[i][0]);
+    t.append('tspan').attr('x', TD.lab / 2).attr('dy', 18).text(LANE_LABELS[i][1]);
+  });
+  for (let i = 1; i < blocks.length; i++){
+    const x = (blocks[i - 1].right + blocks[i].left) / 2;
+    gLanes.append('line').attr('x1', x).attr('x2', x).attr('y1', laneY[1] + 8).attr('y2', H - 8)
+      .attr('stroke', '#94a3b8').attr('stroke-dasharray', '6 5');
+  }
+
+  // Orthogonal connectors: down from the parent, across on the lane boundary, down into the child.
+  const link = (x1, y1, x2, y2, yMid) => gLinks.append('path').attr('class', 'tlink').attr('fill', 'none').attr('stroke', LINK_INK).attr('stroke-width', 1.5)
+    .attr('d', `M${x1},${y1}V${yMid}H${x2}V${y2}`);
+  const place = (n, x, y, w, h, draw) => {
+    const g = gNodes.append('g').attr('class', 'node tnode').attr('transform', `translate(${x},${y})`)
+      .classed('sel', state.selected === n.id).classed('ghost', !!vis && n.type === 'risk' && !matches(n))
+      .on('click', () => onNodeClick(n));
+    draw(g, n, w, h);
+    state.pos.set(n.id, {x: x + w / 2, y: y + h / 2});
+  };
+
+  const span = blocks.length ? [blocks[0].left, blocks[blocks.length - 1].right] : [TD.lab + TD.pad, W - TD.pad];
+  const ow = Math.min(Math.max(520, (span[1] - span[0]) * 0.6), span[1] - span[0], 900), ox = (span[0] + span[1] - ow) / 2;
+  place(org, ox, top(0), ow, cardH[0], drawTOrg);
+  for (const b of blocks){
+    const cw = b.right - b.left, cmid = (b.left + b.right) / 2;
+    link(ox + ow / 2, top(0) + cardH[0], cmid, top(1), laneY[1]);
+    place(b.n, b.left, top(1), cw, cardH[1], drawTCause);
+    for (const l of b.lines){
+      link(cmid, top(1) + cardH[1], l.mid, top(2), laneY[2]);
+      place(l.n, l.mid - TD.cw / 2, top(2), TD.cw, TD.ch, drawTLine);
+      for (const s of l.slots){
+        const rail = s.x + 8;
+        let railTop;
+        if (s.sec){
+          link(l.mid, top(2) + TD.ch, s.x + TD.cw / 2, top(3), laneY[3]);
+          place(s.sec, s.x, top(3), TD.cw, TD.ch, drawTRisk);
+          railTop = top(3) + TD.ch;
+          if (s.units.length) gLinks.append('path').attr('fill', 'none').attr('stroke', LINK_INK).attr('stroke-width', 1.5)
+            .attr('d', `M${s.x + TD.cw / 2},${railTop}V${laneY[4]}H${rail}`);
+          railTop = laneY[4];
+        } else if (s.units.length){
+          link(l.mid, top(2) + TD.ch, rail, laneY[4], laneY[3]);   // no ส่วนงาน: pass straight through its lane
+          railTop = laneY[4];
+        }
+        if (s.cols > 1) gLinks.append('path').attr('fill', 'none').attr('stroke', LINK_INK).attr('stroke-width', 1.5)
+          .attr('d', `M${rail},${laneY[4]}H${rail + (s.cols - 1) * (TD.cw + TD.gapSlot)}`);
+        s.units.forEach((u, k) => {
+          const col = Math.floor(k / TD.rows), row = k % TD.rows;
+          const ux = s.x + col * (TD.cw + TD.gapSlot), uy = top(4) + row * (TD.ch + TD.stack), r = ux + 8;
+          gLinks.append('path').attr('fill', 'none').attr('stroke', LINK_INK).attr('stroke-width', 1.5)
+            .attr('d', `M${r},${row ? uy - TD.stack - TD.ch / 2 : railTop}V${uy + TD.ch / 2}H${ux + TD.indent}`);
+          place(u, ux + TD.indent, uy, TD.cw - TD.indent, TD.ch, drawTRisk);
+        });
+      }
+    }
+    if (!b.lines.length){
+      gNodes.append('text').attr('x', (b.left + b.right) / 2).attr('y', top(2) + TD.ch / 2).attr('text-anchor', 'middle')
+        .attr('font-size', 12).attr('fill', '#b45309').text('ยังไม่ได้เชื่อมโยงปัจจัยเสี่ยงระดับสายงาน');
+    }
+  }
+}
+
+const leftBar = (g, w, h, color) => g.append('path').attr('d', `M10,0V${h}A10,10 0 0 1 0,${h - 10}V10A10,10 0 0 1 10,0Z`).attr('fill', color);
+const badge = (g, cx, cy, r, score, L) => {
+  g.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r).attr('fill', L.color);
+  g.append('text').attr('x', cx).attr('y', cy + r * 0.36).attr('text-anchor', 'middle').attr('font-size', r * 0.95).attr('font-weight', 700)
+    .attr('fill', L.text).text(score || '–');
+};
+const textRows = (g, x, y, arr, px, weight, fill, dy) => arr.forEach((t, i) =>
+  g.append('text').attr('x', x).attr('y', y + i * dy).attr('font-size', px).attr('font-weight', weight).attr('fill', fill).text(t));
+
+function drawTRisk(g, n, w, h){
+  const cur = current(n), L = lv(cur.level), tx = 18, maxW = w - tx - 44;
+  g.append('rect').attr('class', 'card').attr('width', w).attr('height', h).attr('rx', 10);
+  leftBar(g, w, h, L.color);
+  g.append('text').attr('x', tx).attr('y', 18).attr('font-size', 11).attr('fill', '#64748b')
+    .call(t => { t.append('tspan').attr('font-weight', 700).attr('fill', '#334155').text(n.code);
+      t.append('tspan').text(fit(' · ' + n.unit, 11, 400, maxW - n.code.length * 7.2)); });
+  textRows(g, tx, 36, wrapLines(n.name, 12, 500, w - tx - 12, 2, w - tx - 38), 12, 500, '#0f172a', 16);
+  const l3 = g.append('text').attr('x', tx).attr('y', h - 10).attr('font-size', 10.5).attr('fill', '#64748b');
+  l3.append('tspan').text(cur.k >= 0 ? `ผล ${MONTHS[cur.k]} ${fmt(cur.res)} · แผน ${fmt(cur.plan)}` : 'ยังไม่มีผล');
+  if (cur.over) l3.append('tspan').attr('fill', '#dc2626').attr('font-weight', 600).text(' ▲ เกินแผน');
+  badge(g, w - 20, 18, 13, cur.res && cur.res.score, L);
+  g.append('title').text(`${n.code} ${n.name}\n${n.unit}\nระดับ: ${L.name}${cur.res ? ' (' + cur.res.score + ')' : ''}`);
+}
+function drawTLine(g, n, w, h){
+  const c = stats(n), worst = [5,4,3,2,1].find(k => c[k]) || 0, tx = 18;
+  g.append('rect').attr('class', 'card').attr('width', w).attr('height', h).attr('rx', 10).style('fill', '#eef2f8');
+  leftBar(g, w, h, lv(worst).color);
+  g.append('text').attr('x', tx).attr('y', 18).attr('font-size', 11).attr('font-weight', 700).attr('fill', '#334155').text(`${n.code} · ${d3.sum(c)} รายการ`);
+  textRows(g, tx, 36, wrapLines(n.name, 12.5, 600, w - tx - 12, 2), 12.5, 600, '#0f172a', 16);
+  distBar(g, c, tx, h - 14, w - tx - 12, 6);
+  g.append('title').text(`${n.code} ${n.name}\nสูงสุดในกลุ่ม: ${lv(worst).name}`);
+}
+function drawTCause(g, n, w, h){
+  const c = n.cause, v = c.after || c.before, L = lv(levelOf(v && v.score));
+  const unmapped = !(state.map[mapKey(n.org, c)] || []).length, tx = 18, maxW = w - tx - 120;
+  g.append('rect').attr('class', 'card').attr('width', w).attr('height', h).attr('rx', 12);
+  leftBar(g, w, h, L.color);
+  g.append('text').attr('x', tx).attr('y', 20).attr('font-size', 11).attr('fill', '#64748b')
+    .call(t => { t.append('tspan').attr('font-weight', 700).attr('fill', '#0b2a5b').text(c.key); t.append('tspan').text(fit(' · เจ้าของ: ' + c.owner, 11, 400, maxW - 24)); });
+  const nm = wrapLines(c.name, 13.5, 600, maxW, 2);
+  textRows(g, tx, 40, nm, 13.5, 600, '#0f172a', 18);
+  const y0 = 40 + nm.length * 18 + 2;
+  if (unmapped) textRows(g, tx, y0, ['⚠ ยังไม่ได้เชื่อมโยง — คลิกเพื่อกำหนดปัจจัยเสี่ยงระดับสายงาน'].map(t => fit(t, 11, 600, maxW)), 11, 600, '#b45309', 15);
+  else textRows(g, tx, y0, [c.ra && 'RA: ' + c.ra, c.rt && 'RT: ' + c.rt].filter(Boolean).slice(0, 2).map(t => fit(t, 10.5, 400, maxW)), 10.5, 400, '#475569', 15);
+  [['ก่อน', c.before], ['หลัง', c.after]].forEach(([lab, s], i) => {
+    const bx = w - 92 + i * 52;
+    badge(g, bx, 40, 18, s && s.score, lv(levelOf(s && s.score)));
+    g.append('text').attr('x', bx).attr('y', 74).attr('text-anchor', 'middle').attr('font-size', 10.5).attr('fill', '#64748b').text(`${lab} ${fmt(s)}`);
+  });
+  g.append('text').attr('x', w - 66).attr('y', 45).attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#94a3b8').text('→');
+  g.append('title').text(`${c.key} ${c.name}\nเจ้าของ: ${c.owner}\nRA: ${c.ra}\nRT: ${c.rt}\nคลิกเพื่อกำหนดการเชื่อมโยง`);
+}
+function drawTOrg(g, n, w, h){
+  const o = n.org, L = lv(orgLevel(o)), tx = 22, maxW = w - tx - 70;
+  const worst = d3.max(o.causes, x => (x.after || x.before || {score: 0}).score);
+  g.append('rect').attr('width', w).attr('height', h).attr('rx', 14).attr('fill', '#0b2a5b');
+  leftBar(g, w, h, L.color);
+  g.append('text').attr('x', tx).attr('y', 24).attr('font-size', 11.5).attr('fill', '#c7d2fe').text(fit(o.period || 'ปัจจัยเสี่ยงระดับองค์กร', 11.5, 400, maxW));
+  g.append('text').attr('x', tx).attr('y', 52).attr('font-size', 20).attr('font-weight', 700).attr('fill', '#fff').text(fit(`${n.code} ${n.name}`, 20, 700, maxW));
+  g.append('text').attr('x', tx).attr('y', 78).attr('font-size', 11.5).attr('fill', '#c7d2fe')
+    .text(fit(`${o.causes.length} สาเหตุ · ${viewRisks().length} ปัจจัยเสี่ยงที่เชื่อมโยง${o.strategy ? ' · ' + o.strategy : ''}`, 11.5, 400, maxW));
+  badge(g, w - 38, h / 2, 22, worst, L);
 }
 function linkColor(n){
   if (n.type === 'risk') return lv(current(n).level).color;
@@ -795,22 +967,27 @@ function select(id, reveal = true){
     const vis = visibleSet();
     if (vis && !vis.has(id)){ state.unit = ''; state.levelOn = new Set([0,1,2,3,4,5]); syncFilters(); }
     render(n);
-    const d = layoutRoot.descendants().find(d => d.data.id === id);
+    const d = nodeCenter(id);
     if (d){ const k = Math.max(d3.zoomTransform(svg.node()).k, .8); const r = svg.node().getBoundingClientRect();
       const w = r.width > 900 ? r.width - 440 : r.width;   // keep clear of the detail panel
-      svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity.translate(w / 2 - (d.y + CW / 2) * k, r.height / 2 - d.x * k).scale(k)); }
+      svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity.translate(w / 2 - d.x * k, r.height / 2 - d.y * k).scale(k)); }
   } else render();
   showDetail(n);
 }
+function nodeCenter(id){
+  if (state.view.type === 'org') return state.pos.get(id);
+  const d = layoutRoot.descendants().find(d => d.data.id === id);
+  return d && {x: d.y + nodeWidth(d.data) / 2, y: d.x};
+}
 function layoutBounds(){
+  if (state.view.type === 'org') return state.box;
   const ns = layoutRoot.descendants();
   const x0 = d3.min(ns, d => d.y), x1 = d3.max(ns, d => d.y + nodeWidth(d.data) + 14);
   const y0 = d3.min(ns, d => d.x - CH / 2), y1 = d3.max(ns, d => d.x + CH / 2);
-  if (state.view.type === 'org'){ const l = laneBox(layoutRoot); return {x: l.left, y: l.top, width: l.right - l.left, height: l.bottom - l.top}; }
   return {x: x0, y: y0, width: x1 - x0, height: y1 - y0};
 }
 function fitView(dur = 400){
-  if (!layoutRoot) return;
+  if (!state.view) return;
   const b = layoutBounds();
   const r = svg.node().getBoundingClientRect(), pad = 40;
   const k = Math.min(1.1, Math.min((r.width - pad * 2) / b.width, (r.height - pad * 2) / b.height));
@@ -958,7 +1135,8 @@ async function exportCanvas(){
   const css = await embeddedFontCss();
   const legend = [5,4,3,2,1,0].map((k, i) => `<g transform="translate(${pad + i * 112},70)"><rect width="12" height="12" rx="3" fill="${lv(k).color}"/><text x="18" y="11" font-size="12" fill="#334155">${lv(k).name} ${rangeText(k)}</text></g>`).join('');
   const now = new Date().toLocaleDateString('th-TH', {year: 'numeric', month: 'long', day: 'numeric'});
-  const filt = [state.unit && 'หน่วยงาน: ' + state.unit, state.levelOn.size < 6 && 'ระดับ: ' + [...state.levelOn].map(k => lv(k).name).join(', ')].filter(Boolean).join(' · ');
+  const only = state.onlyCause && state.byId.get(state.onlyCause);
+  const filt = [only && `เฉพาะสาเหตุ ${only.code}`, state.unit && 'หน่วยงาน: ' + state.unit, state.levelOn.size < 6 && 'ระดับ: ' + [...state.levelOn].map(k => lv(k).name).join(', ')].filter(Boolean).join(' · ');
   const xml = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <style>${css} text{font-family:"Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif} .link{fill:none;stroke-width:1.6} .card{fill:#fff;stroke:#d8dee8} .node.sel .card{stroke:#1d4ed8;stroke-width:2.5} .ghost{opacity:.45}</style>
     <rect width="100%" height="100%" fill="#fff"/>
@@ -971,7 +1149,7 @@ async function exportCanvas(){
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
   await img.decode();
   // Vertical extents of every card in export coordinates, so page breaks can avoid cutting through one.
-  const spans = layoutRoot.descendants().map(d => [d.x - CH / 2 + pad + headH - b.y, d.x + CH / 2 + pad + headH - b.y]);
+  const spans = state.view.type === 'org' ? [] : layoutRoot.descendants().map(d => [d.x - CH / 2 + pad + headH - b.y, d.x + CH / 2 + pad + headH - b.y]);
   return {img, W, H, spans};
 }
 // Draws rows [y0, y0+h) of the export image onto a canvas at the given scale.
@@ -1012,7 +1190,29 @@ document.getElementById('pngBtn').onclick = e => withBusy(e.currentTarget, async
   if (!blob) throw new Error('Diagram ใหญ่เกินไป ลองย่อบางกิ่งก่อน');
   download(blob, baseName() + '.png'); toast('บันทึก PNG แล้ว');
 });
+// Org view: A3 landscape pages; the whole diagram on one page, or one page per cause when it would shrink below half size.
+async function exportOrgPdf(){
+  const {jsPDF} = window.jspdf, A3 = [1190.55, 841.89], PT = 0.75, M = 18;
+  const fitK = s => Math.min((A3[0] - M * 2) / (s.W * PT), (A3[1] - M * 2) / (s.H * PT));
+  let shots = [await exportCanvas()];
+  const causes = state.view.children;
+  if (fitK(shots[0]) < 0.5 && causes.length > 1){
+    shots = [];
+    try { for (const c of causes){ state.onlyCause = c.id; shots.push(await exportCanvas()); } }
+    finally { state.onlyCause = null; render(); }
+  }
+  const pdf = new jsPDF({orientation: 'landscape', unit: 'pt', format: 'a3', compress: true});
+  shots.forEach((s, i) => {
+    if (i) pdf.addPage('a3', 'landscape');
+    const k = Math.min(1, fitK(s)), w = s.W * PT * k, h = s.H * PT * k;
+    const cv = tile(s.img, s.W, 0, s.H, Math.min(2, w * 2.5 / s.W, 14000 / s.W));   // ~2.5 px per placed point
+    pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', (A3[0] - w) / 2, M, w, h);
+    if (shots.length > 1){ pdf.setFontSize(9); pdf.setTextColor(148, 163, 184); pdf.text(`${i + 1} / ${shots.length}`, A3[0] - M, A3[1] - 10, {align: 'right'}); }
+  });
+  download(pdf.output('blob'), baseName() + '.pdf'); toast(`บันทึก PDF แนวนอน A3 แล้ว (${shots.length} หน้า)`);
+}
 document.getElementById('pdfBtn').onclick = e => withBusy(e.currentTarget, async () => {
+  if (state.view.type === 'org') return exportOrgPdf();
   const {img, W, H, spans} = await exportCanvas();
   const {jsPDF} = window.jspdf;
   const PT = 0.75, scale = Math.min(1.6, 14000 / W);
