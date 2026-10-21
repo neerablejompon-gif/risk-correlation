@@ -1,0 +1,4 @@
+# Risk result files contain internal data; keep them out of the repo.
+*.pdf
+*.xlsx
+*.json

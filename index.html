@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risk Linkage Diagram</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6fa; --panel:#ffffff; --ink:#0f172a; --ink-2:#475569; --ink-3:#94a3b8;
+  --line:#e2e8f0; --accent:#1d4ed8; --accent-soft:#e8eefc; --navy:#0b2a5b;
+  --lv0:#94a3b8; --lv1:#15803d; --lv2:#84cc16; --lv3:#facc15; --lv4:#f97316; --lv5:#dc2626;
+  --font:"Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--font);display:flex;flex-direction:column;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+header{display:flex;align-items:center;gap:12px;padding:10px 18px;background:var(--navy);color:#fff;flex-wrap:wrap}
+header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.2px}
+header .file{font-size:13px;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40ch}
+header .sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:#cbd5e1;background:#f8fafc}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+header .btn{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#fff}
+header .btn:hover{background:rgba(255,255,255,.2)}
+header .btn.primary{background:#fff;color:var(--navy);border-color:#fff}
+main{flex:1;display:flex;min-height:0;position:relative}
+aside.side{width:290px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:18px}
+.sec h3{font-size:12px;font-weight:600;color:var(--ink-2);text-transform:uppercase;letter-spacing:.6px;margin:0 0 8px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.stat b{display:block;font-size:22px;font-weight:700;line-height:1.1}
+.stat span{font-size:12px;color:var(--ink-2)}
+.levels{display:flex;flex-direction:column;gap:4px}
+.lvl{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid transparent;user-select:none}
+.lvl:hover{background:#f8fafc}
+.lvl.off{opacity:.38}
+.lvl .sw{width:14px;height:14px;border-radius:4px;flex-shrink:0}
+.lvl .nm{flex:1}
+.lvl .rg{font-size:11px;color:var(--ink-3)}
+.lvl .ct{font-weight:600;min-width:2.5em;text-align:right}
+.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line);margin-top:8px}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.field label{font-size:12px;color:var(--ink-2)}
+.field select,.field input{border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff;width:100%}
+.search{position:relative}
+.results{position:absolute;left:0;right:0;top:100%;margin-top:4px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.12);max-height:320px;overflow-y:auto;z-index:20;display:none}
+.results.open{display:block}
+.results div{padding:7px 10px;cursor:pointer;display:flex;gap:8px;align-items:flex-start;font-size:13px;border-bottom:1px solid #f1f5f9}
+.results div:hover,.results div.act{background:var(--accent-soft)}
+.results .dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.results code{font-size:11px;color:var(--ink-2)}
+details.th summary{cursor:pointer;font-size:12px;color:var(--ink-2);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.thgrid{display:grid;grid-template-columns:1fr 70px;gap:6px 10px;align-items:center;margin-top:10px;font-size:13px}
+.thgrid input{border:1px solid var(--line);border-radius:6px;padding:4px 6px;width:100%}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+#stage{flex:1;position:relative;min-width:0}
+#stage svg{width:100%;height:100%;display:block;cursor:grab}
+#stage svg:active{cursor:grabbing}
+.zoombar{position:absolute;right:14px;bottom:14px;display:flex;flex-direction:column;gap:6px}
+.zoombar .btn{width:36px;height:36px;justify-content:center;padding:0;font-size:16px;box-shadow:0 2px 8px rgba(15,23,42,.08)}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px}
+.drop{max-width:560px;width:100%;border:2px dashed #cbd5e1;border-radius:18px;background:var(--panel);padding:44px 28px;text-align:center;cursor:pointer;transition:.15s}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop h2{margin:12px 0 6px;font-size:20px}
+.drop p{margin:0;color:var(--ink-2)}
+.drop .ic{width:56px;height:56px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:28px}
+.prog{margin-top:18px;display:none}
+.prog .track{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.prog .fill{height:100%;width:0;background:var(--accent);transition:width .15s}
+.prog p{font-size:13px;margin-top:8px}
+.err{color:var(--lv5);margin-top:12px;font-size:13px}
+aside.detail{position:absolute;top:0;right:0;bottom:0;width:440px;max-width:100%;background:var(--panel);border-left:1px solid var(--line);box-shadow:-12px 0 30px rgba(15,23,42,.08);transform:translateX(100%);transition:transform .2s;overflow-y:auto;z-index:15}
+aside.detail.open{transform:none}
+.dhead{padding:18px 20px 14px;border-bottom:1px solid var(--line);position:relative}
+.dhead .x{position:absolute;right:12px;top:12px;border:0;background:none;font-size:20px;cursor:pointer;color:var(--ink-3)}
+.dhead code{font-size:12px;color:var(--ink-2)}
+.dhead h2{font-size:16px;margin:4px 30px 8px 0;font-weight:600;line-height:1.45}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+.dbody{padding:14px 20px 24px;display:flex;flex-direction:column;gap:16px}
+.dbody h4{margin:0 0 6px;font-size:12px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.6px}
+.crumbs{display:flex;flex-wrap:wrap;gap:4px;font-size:12px}
+.crumbs a{color:var(--accent);cursor:pointer;text-decoration:none}
+.crumbs a:hover{text-decoration:underline}
+table.months{border-collapse:collapse;width:100%;font-size:11px;table-layout:fixed}
+table.months th,table.months td{border:1px solid var(--line);text-align:center;padding:4px 0}
+table.months th{background:#f8fafc;font-weight:600;color:var(--ink-2)}
+table.months td.lab{font-weight:600;color:var(--ink-2);width:38px}
+.kids div{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px}
+.kids div:hover{color:var(--accent)}
+.kids .dot{width:10px;height:10px;border-radius:50%;margin-top:6px;flex-shrink:0}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+.toast.show{opacity:1}
+.node{cursor:pointer}
+.node .card{fill:#fff;stroke:#d8dee8;stroke-width:1}
+.node:hover .card{stroke:#94a3b8}
+.node.sel .card{stroke:var(--accent);stroke-width:2.5}
+.node.ghost{opacity:.45}
+.link{fill:none;stroke-width:1.6}
+.cause{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:13px}
+.cause b{color:var(--navy)}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+.chip{background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600}
+.chip.warn{background:#fef3c7;color:#92400e}
+dialog{border:0;border-radius:14px;padding:0;width:min(560px,94vw);box-shadow:0 20px 60px rgba(15,23,42,.3)}
+dialog::backdrop{background:rgba(15,23,42,.45)}
+.dlg-h{padding:16px 20px;border-bottom:1px solid var(--line)}
+.dlg-h h3{margin:0 0 4px;font-size:16px}
+.dlg-h p{margin:0;font-size:13px;color:var(--ink-2)}
+.dlg-b{padding:12px 20px;max-height:55vh;overflow-y:auto}
+.dlg-b label.opt{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;cursor:pointer}
+.dlg-f{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.loaded{margin-top:14px;font-size:13px;color:var(--ink-2)}
+@media (max-width:820px){
+  aside.side{position:absolute;z-index:16;top:0;bottom:0;left:0;transform:translateX(-100%);transition:transform .2s;box-shadow:12px 0 30px rgba(15,23,42,.1)}
+  aside.side.open{transform:none}
+  #menuBtn{display:inline-flex !important}
+  header .file{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <button class="btn" id="menuBtn" style="display:none" aria-label="เมนู">☰</button>
+  <h1>Diagram เชื่อมโยงปัจจัยเสี่ยง</h1>
+  <span class="file" id="fileName"></span>
+  <span class="sp"></span>
+  <button class="btn primary" id="uploadBtn">อัปโหลดไฟล์</button>
+  <button class="btn" id="pngBtn" disabled>Export PNG</button>
+  <button class="btn" id="pdfBtn" disabled>Export PDF</button>
+  <input type="file" id="fileInput" accept=".pdf,.xlsx,.json" multiple hidden>
+</header>
+<main>
+  <aside class="side" id="side">
+    <div class="sec" id="orgSec" hidden>
+      <h3>ปัจจัยเสี่ยงองค์กร</h3>
+      <div class="field"><select id="orgSel"></select></div>
+      <div id="causeList"></div>
+      <div class="row">
+        <button class="btn" id="mapExport">บันทึกการเชื่อมโยง</button>
+        <button class="btn" id="mapImport">โหลดการเชื่อมโยง</button>
+      </div>
+    </div>
+    <div class="sec">
+      <h3>สรุปผล</h3>
+      <div class="stats">
+        <div class="stat"><b id="stTotal">–</b><span>ปัจจัยเสี่ยง</span></div>
+        <div class="stat"><b id="stUnits">–</b><span>ส่วนงาน/หน่วยงาน</span></div>
+        <div class="stat"><b id="stOver" style="color:var(--lv5)">–</b><span>ผลเกินแผน</span></div>
+        <div class="stat"><b id="stNone" style="color:var(--ink-3)">–</b><span>ไม่มีผล</span></div>
+      </div>
+      <div class="bar" id="distBar"></div>
+    </div>
+    <div class="sec">
+      <h3>ระดับความเสี่ยง (คลิกเพื่อกรอง)</h3>
+      <div class="levels" id="levels"></div>
+    </div>
+    <div class="sec">
+      <div class="field search">
+        <label for="q">ค้นหารหัส / ชื่อปัจจัยเสี่ยง</label>
+        <input id="q" type="search" placeholder="เช่น UR0101 หรือ ค่าใช้จ่าย" autocomplete="off">
+        <div class="results" id="results"></div>
+      </div>
+      <div class="field">
+        <label for="unitSel">ส่วนงาน/หน่วยงานผู้รับผิดชอบ</label>
+        <select id="unitSel"><option value="">ทั้งหมด</option></select>
+      </div>
+      <div class="field">
+        <label for="monthSel">ผลของเดือน</label>
+        <select id="monthSel"></select>
+      </div>
+      <div class="row">
+        <button class="btn" id="expandAll">ขยายทั้งหมด</button>
+        <button class="btn" id="collapseAll">ย่อทั้งหมด</button>
+      </div>
+    </div>
+    <details class="sec th">
+      <summary>เกณฑ์ระดับ (คะแนน L×I)</summary>
+      <div class="thgrid" id="thGrid"></div>
+      <div class="row" style="margin-top:10px"><button class="btn" id="thReset">คืนค่าเริ่มต้น</button></div>
+    </details>
+  </aside>
+  <div id="stage">
+    <svg id="svg"></svg>
+    <div class="zoombar" id="zoombar" hidden>
+      <button class="btn" id="zIn" title="ซูมเข้า">+</button>
+      <button class="btn" id="zOut" title="ซูมออก">−</button>
+      <button class="btn" id="zFit" title="พอดีจอ">⤢</button>
+    </div>
+    <div class="empty" id="empty">
+      <div class="drop" id="drop">
+        <div class="ic">⇪</div>
+        <h2>อัปโหลดไฟล์ผลการบริหารความเสี่ยง</h2>
+        <p>PDF ผลระดับส่วนงาน/หน่วยงาน และ Excel ผลปัจจัยเสี่ยงองค์กร (เลือกพร้อมกันได้)<br>ระบบอ่านไฟล์ในเบราว์เซอร์เท่านั้น ไม่มีการส่งข้อมูลออก</p>
+        <div class="loaded" id="loaded"></div>
+        <div class="prog" id="prog"><div class="track"><div class="fill" id="progFill"></div></div><p id="progText"></p></div>
+        <div class="err" id="err"></div>
+      </div>
+    </div>
+  </div>
+  <aside class="detail" id="detail"></aside>
+</main>
+<dialog id="mapDlg">
+  <div class="dlg-h"><h3 id="mapTitle"></h3><p>เลือกปัจจัยเสี่ยงระดับสายงานที่เป็นผลจากสาเหตุนี้ ระบบจะรวมระดับส่วนงาน/หน่วยงานที่อยู่ใต้รหัสนั้นให้อัตโนมัติ</p></div>
+  <div class="dlg-b">
+    <div class="field"><input id="mapFilter" type="search" placeholder="กรองรายการ"></div>
+    <div id="mapList"></div>
+    <div class="field" style="margin-top:10px"><label for="mapExtra">รหัสเพิ่มเติม (ระดับส่วนงาน/หน่วยงาน คั่นด้วย ,)</label><input id="mapExtra" placeholder="เช่น UR0101, UR140401"></div>
+  </div>
+  <div class="dlg-f"><button class="btn" id="mapCancel">ยกเลิก</button><button class="btn primary" id="mapSave" style="background:var(--navy);color:#fff">บันทึก</button></div>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import * as pdfjs from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.mjs';
+pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
+const CMAP_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/cmaps/';
+
+const MONTHS = ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.'];
+const LEVELS = [
+  {key:0, name:'ไม่มีข้อมูล', color:'#94a3b8', text:'#fff'},
+  {key:1, name:'ต่ำมาก',     color:'#15803d', text:'#fff'},
+  {key:2, name:'ต่ำ',        color:'#84cc16', text:'#1a2e05'},
+  {key:3, name:'ปานกลาง',    color:'#facc15', text:'#422006'},
+  {key:4, name:'สูง',        color:'#f97316', text:'#431407'},
+  {key:5, name:'สูงมาก',     color:'#dc2626', text:'#fff'},
+];
+// Upper score bound of levels 1-4 (level 5 is anything above), matching the source system's colors.
+const DEFAULT_TH = [2, 4, 9, 16];
+
+/* ---------- PDF parsing ---------- */
+
+// Windows Thai fonts place shifted tone marks/vowels in the Private Use Area.
+const PUA = {0xF700:0x0E10,0xF701:0x0E34,0xF702:0x0E35,0xF703:0x0E36,0xF704:0x0E37,0xF705:0x0E48,0xF706:0x0E49,
+  0xF707:0x0E4A,0xF708:0x0E4B,0xF709:0x0E4C,0xF70A:0x0E48,0xF70B:0x0E49,0xF70C:0x0E4A,0xF70D:0x0E4B,0xF70E:0x0E4C,
+  0xF70F:0x0E0D,0xF710:0x0E31,0xF711:0x0E4D,0xF712:0x0E47,0xF713:0x0E48,0xF714:0x0E49,0xF715:0x0E4A,0xF716:0x0E4B,
+  0xF717:0x0E4C,0xF718:0x0E38,0xF719:0x0E39,0xF71A:0x0E3A};
+function normThai(s){
+  let o = '';
+  for (const ch of s){ const c = ch.codePointAt(0); o += PUA[c] ? String.fromCodePoint(PUA[c]) : ch; }
+  return o.replace(/ํ([่-๋]?)า/g, '$1ำ').normalize('NFC');
+}
+
+const PAGE_STRIDE = 100000;           // stacks pages into one coordinate space so rows may span pages
+const X = {noMin:180, codeMin:212, nameMin:266, nameMax:1092, anchorMin:1092, anchorMax:1132};
+
+function joinLine(items){
+  let out = '', prev = null;
+  for (const it of items){
+    if (prev && it.x - (prev.x + prev.w) > 3.5 && !/\s$/.test(out) && !/^\s/.test(it.s)) out += ' ';
+    out += it.s; prev = it;
+  }
+  return out;
+}
+function groupLines(items, tol = 4){
+  const sorted = items.map((it, i) => ({...it, i})).sort((a, b) => a.y - b.y || a.i - b.i);
+  const lines = [];
+  for (const it of sorted){
+    const l = lines[lines.length - 1];
+    if (l && it.y - l.y0 <= tol) l.items.push(it); else lines.push({y0: it.y, items: [it]});
+  }
+  for (const l of lines) l.items.sort((a, b) => a.x - b.x || a.i - b.i);
+  return lines;
+}
+function parseLI(s){
+  const m = s && s.match(/([1-5])\s*[xX×]\s*([1-5])/);
+  return m ? {l: +m[1], i: +m[2], score: m[1] * m[2]} : null;
+}
+
+async function parsePdf(buf, onProgress){
+  const doc = await pdfjs.getDocument({data: buf, cMapUrl: CMAP_URL, cMapPacked: true}).promise;
+  const items = [];
+  const pageCols = [];                // per page: month column boundaries
+  let lastCols = null;
+  for (let p = 1; p <= doc.numPages; p++){
+    const page = await doc.getPage(p);
+    const H = page.view[3];
+    const tc = await page.getTextContent();
+    const base = (p - 1) * PAGE_STRIDE;
+    const pageItems = [];
+    for (const it of tc.items){
+      if (!it.str) continue;
+      const s = normThai(it.str);
+      if (!s.trim()) continue;
+      pageItems.push({s, x: it.transform[4], w: it.width, y: base + (H - it.transform[5]), page: p});
+    }
+    const first = pageItems.find(i => i.s.trim() === 'ต.ค.'), last = pageItems.find(i => i.s.trim() === 'ก.ย.');
+    if (first && last && last.x > first.x){
+      const step = (last.x - first.x) / 11;
+      lastCols = {start: first.x - step * 0.25, step, end: last.x + step * 0.7};
+    }
+    pageCols[p] = lastCols || {start: 1133, step: 39, end: 1599};
+    items.push(...pageItems);
+    onProgress?.(p / doc.numPages, p, doc.numPages);
+  }
+
+  const colsAt = y => pageCols[Math.floor(y / PAGE_STRIDE) + 1];
+  const inX = (it, a, b) => it.x >= a && it.x < b;
+
+  // Section headers: "ส่วนงาน/หน่วยงานผู้รับผิดชอบ: <unit>"
+  const sections = [];
+  for (const l of groupLines(items.filter(it => inX(it, X.noMin, X.nameMax)))){
+    const t = joinLine(l.items).trim();
+    const m = t.match(/ผู้รับผิดชอบ\s*[:：]\s*(.+)$/);
+    if (m && /^ส่วนงาน|^หน่วยงาน/.test(t)) sections.push({y: l.y0, unit: m[1].trim()});
+  }
+  const anchors = items.filter(it => inX(it, X.anchorMin, X.anchorMax) && /^(แผน|ผล)$/.test(it.s.trim()))
+    .map(it => ({y: it.y, kind: it.s.trim() === 'แผน' ? 'plan' : 'result'})).sort((a, b) => a.y - b.y);
+
+  function rowValues(y0, yEnd){
+    const c = colsAt(y0);
+    const vals = new Array(12).fill(null), cell = Array.from({length: 12}, () => []);
+    const over = [];
+    for (const it of items){
+      if (it.y < y0 - 5 || it.y >= yEnd) continue;
+      if (it.x >= c.start && it.x < c.end && it.y <= y0 + 5){
+        const k = Math.min(11, Math.max(0, Math.floor((it.x - c.start) / c.step)));
+        cell[k].push(it);
+      } else if (it.x >= c.end && it.x < c.end + 120) over.push(it);
+    }
+    cell.forEach((arr, k) => { vals[k] = parseLI(joinLine(arr.sort((a, b) => a.x - b.x))); });
+    const overflow = parseLI(groupLines(over).map(l => joinLine(l.items)).join(' '));
+    return {vals, overflow};
+  }
+
+  const records = [];
+  const warnings = [];
+  for (let a = 0; a < anchors.length; a++){
+    const P = anchors[a];
+    if (P.kind !== 'plan') continue;
+    const R = anchors[a + 1] && anchors[a + 1].kind === 'result' ? anchors[a + 1] : null;
+    const nextPlan = anchors.slice(a + 1).find(x => x.kind === 'plan');
+    const nextSec = sections.find(s => s.y > P.y + 5);
+    const pageEnd = (Math.floor(P.y / PAGE_STRIDE) + 1) * PAGE_STRIDE;
+    const bound = Math.min(nextPlan ? nextPlan.y : Infinity, nextSec ? nextSec.y : Infinity);
+    const same = it => Math.abs(it.y - P.y) < 6;
+
+    const code = items.filter(it => same(it) && inX(it, X.codeMin, X.nameMin)).sort((a, b) => a.x - b.x)
+      .map(it => it.s).join('').replace(/\s+/g, '');
+    if (!/^[A-Z]{1,4}\d+/i.test(code)){ warnings.push(`ข้ามแถวที่ไม่มีรหัส (หน้า ${Math.floor(P.y / PAGE_STRIDE) + 1})`); continue; }
+    const no = items.filter(it => same(it) && inX(it, X.noMin, X.codeMin)).map(it => it.s).join('').trim();
+    const nameItems = items.filter(it => it.y >= P.y - 6 && it.y < Math.min(bound - 4, pageEnd) && inX(it, X.nameMin, X.nameMax));
+    const name = groupLines(nameItems).map(l => joinLine(l.items).trim())
+      .reduce((s, t) => !s ? t : s + (/[A-Za-z0-9)]$/.test(s) && /^[A-Za-z0-9(]/.test(t) ? ' ' : '') + t, '');
+    const sec = [...sections].reverse().find(s => s.y < P.y);
+
+    const plan = rowValues(P.y, R ? R.y - 4 : bound - 4);
+    const res = R ? rowValues(R.y, bound - 4) : {vals: new Array(12).fill(null), overflow: null};
+    if (!plan.vals[11] && plan.overflow) plan.vals[11] = plan.overflow;
+    if (!res.vals[11] && res.overflow) res.vals[11] = res.overflow;
+
+    records.push({code: code.toUpperCase(), no, name: name || '(ไม่มีชื่อ)', unit: sec ? sec.unit : 'ไม่ระบุ',
+      plan: plan.vals, result: res.vals});
+  }
+  return {records, pages: doc.numPages, warnings};
+}
+
+/* ---------- Model ---------- */
+
+const state = {
+  file: '', records: [], byId: new Map(), units: [], view: null,
+  th: loadTh(), month: 'latest', levelOn: new Set([0,1,2,3,4,5]), unit: '',
+  expanded: new Set(['ROOT']), selected: null,
+  orgs: [], orgFile: '', orgCode: '', map: loadMap(),
+};
+
+function loadTh(){
+  try { const v = JSON.parse(localStorage.getItem('riskTh')); if (Array.isArray(v) && v.length === 4) return v; } catch {}
+  return [...DEFAULT_TH];
+}
+function saveTh(){ try { localStorage.setItem('riskTh', JSON.stringify(state.th)); } catch {} }
+
+function levelOf(score){
+  if (!score) return 0;
+  const t = state.th;
+  return score <= t[0] ? 1 : score <= t[1] ? 2 : score <= t[2] ? 3 : score <= t[3] ? 4 : 5;
+}
+function monthIndex(rec){
+  if (state.month !== 'latest') return +state.month;
+  for (let k = 11; k >= 0; k--) if (rec.result[k]) return k;
+  return -1;
+}
+function current(rec){
+  const k = monthIndex(rec);
+  const res = k >= 0 ? rec.result[k] : null, plan = k >= 0 ? rec.plan[k] : null;
+  return {k, res, plan, level: levelOf(res && res.score), over: !!(res && plan && res.score > plan.score)};
+}
+
+function buildModel(records){
+  const byId = new Map(), firstByCode = new Map();
+  records.forEach((r, i) => {
+    let id = r.code, n = 2;
+    while (byId.has(id)) id = `${r.code}·${n++}`;
+    const node = {...r, id, type: 'risk', children: [], parent: null, order: i};
+    byId.set(id, node);
+    if (!firstByCode.has(r.code)) firstByCode.set(r.code, node);
+  });
+  const root = {id: 'ROOT', type: 'root', name: 'ภาพรวมความเสี่ยง', children: [], parent: null, order: -1};
+  byId.set('ROOT', root);
+  const group = (gid, props) => {
+    if (!byId.has(gid)){ const g = {id: gid, type: 'group', children: [], parent: root, ...props}; byId.set(gid, g); root.children.push(g); }
+    return byId.get(gid);
+  };
+  for (const node of byId.values()){
+    if (node.type !== 'risk') continue;
+    // Codes follow UR + สายงาน(2) + ส่วนงาน(2) + หน่วยงาน(2-3); a หน่วยงาน's parent is its ส่วนงาน prefix only.
+    const key = (node.code.match(/^[A-Z]+\d{2}/) || [node.code])[0];
+    const sec = node.code.length > key.length + 2 && firstByCode.get(node.code.slice(0, key.length + 2));
+    let parent = sec && sec !== node ? sec : null;
+    if (!parent){
+      // Short local codes (e.g. "UR01" reused by several units) carry no hierarchy: group them by unit instead.
+      parent = node.code.length > key.length
+        ? group('G:' + key, {code: key, name: 'กลุ่ม ' + key, order: node.order})
+        : group('U:' + node.unit, {code: '~' + node.unit, name: node.unit, unit: 'รหัสระดับหน่วยงาน', order: node.order});
+    }
+    node.parent = parent;
+    parent.children.push(node);
+  }
+  for (const n of byId.values()){
+    n.children.sort((a, b) => (a.code || '').localeCompare(b.code || '', 'en', {numeric: true}) || a.order - b.order);
+    if (n.id.startsWith('G:')){
+      const units = d3.rollups(descendants(n).filter(d => d.type === 'risk'), v => v.length, d => d.unit).sort((a, b) => b[1] - a[1]);
+      // Name the group after the unit owning its top-level risks, e.g. "ฝ่ายยุทธศาสตร์องค์กร".
+      const top = d3.rollups(n.children, v => v.length, d => d.unit).sort((a, b) => b[1] - a[1]);
+      if (top.length) n.name = top[0][0];
+      n.unit = `${units.length} หน่วยงาน`;
+    }
+  }
+  root.children.sort((a, b) => a.id[0].localeCompare(b.id[0]) || (a.id[0] === 'U' ? a.name.localeCompare(b.name, 'th', {numeric: true})
+    : a.code.localeCompare(b.code, 'en', {numeric: true})));
+  state.all = byId; state.overview = root; state.records = [...byId.values()].filter(n => n.type === 'risk');
+}
+function setView(root){
+  state.view = root;
+  state.byId = new Map([root, ...descendants(root)].map(n => [n.id, n]));
+  state.units = [...new Set(viewRisks().map(r => r.unit))];
+  state.unit = ''; state.levelOn = new Set([0,1,2,3,4,5]); state.selected = null;
+  // Org diagrams are small enough to show fully expanded; the overview starts collapsed.
+  state.expanded = root.type === 'org' ? new Set([...state.byId.values()].filter(n => n.children.length).map(n => n.id)) : new Set(['ROOT']);
+  document.getElementById('unitSel').innerHTML = '<option value="">ทั้งหมด</option>' + [...state.units].sort((a, b) => a.localeCompare(b, 'th')).map(u => `<option>${esc(u)}</option>`).join('');
+  document.querySelector('header h1').textContent = viewTitle();
+  document.getElementById('detail').classList.remove('open');
+  refreshSidebar(); render(); fitView(0);
+}
+const viewRisks = () => state.view === state.overview ? state.records : [...state.byId.values()].filter(n => n.type === 'risk');
+const viewTitle = () => 'Diagram เชื่อมโยงปัจจัยเสี่ยง' + (state.view && state.view.type === 'org' ? ` ${state.view.code} ${state.view.name}` : '');
+
+/* ---------- Organization-level risks (Excel) ---------- */
+
+// One sheet per org risk + cause: "ปัจจัยเสี่ยงระดับองค์กร | S1 ...", "สาเหตุความเสี่ยง | R1 ...", before/after L×I.
+function parseOrgXlsx(buf){
+  const wb = XLSX.read(buf, {type: 'array'});
+  const orgs = new Map();
+  for (const sheet of wb.SheetNames){
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {header: 1, defval: ''}).map(r => r.map(c => String(c).replace(/\s+/g, ' ').trim()));
+    const find = re => { for (let r = 0; r < rows.length; r++) for (let c = 0; c < rows[r].length; c++) if (re.test(rows[r][c])) return [r, c]; return null; };
+    const after = re => { const p = find(re); return p ? rows[p[0]].slice(p[1] + 1).find(Boolean) || '' : ''; };
+    const level = re => {
+      const p = find(re); if (!p) return null;
+      for (let r = p[0] + 1; r < Math.min(rows.length, p[0] + 5); r++){
+        const [l, i] = [+rows[r][p[1]], +rows[r][p[1] + 1]];
+        if (l >= 1 && l <= 5 && i >= 1 && i <= 5) return {l, i, score: l * i};
+      }
+      return null;
+    };
+    const orgT = after(/^ปัจจัยเสี่ยงระดับองค์กร$/), causeT = after(/^สาเหตุความเสี่ยง/);
+    if (!orgT || !causeT) continue;
+    const [code, ...name] = orgT.split(' '), [key, ...cname] = causeT.split(' ');
+    if (!orgs.has(code)) orgs.set(code, {code, name: name.join(' '), period: after(/^ผลการดำเนินงาน$/), causes: []});
+    const org = orgs.get(code);
+    org.causes.push({key, name: cname.join(' '), owner: after(/^เจ้าของปัจจัยเสี่ยง/),
+      before: level(/ระดับความเสี่ยงก่อนบริหาร/), after: level(/ระดับความเสี่ยงหลังบริหาร/), sheet});
+  }
+  return [...orgs.values()];
+}
+
+const mapKey = (org, c) => `${org.code}|${c.key}`;
+function loadMap(){ try { return JSON.parse(localStorage.getItem('riskMap')) || {}; } catch { return {}; } }
+function saveMap(){ try { localStorage.setItem('riskMap', JSON.stringify(state.map)); } catch {} }
+const colOf = code => code.length <= 4 ? 2 : code.length <= 6 ? 3 : 4;   // UR01 สายงาน · UR0101 ส่วนงาน · UR010101 หน่วยงาน
+
+// Org → causes → สายงาน → ส่วนงาน → หน่วยงาน. Tree depth equals column; gap nodes fill skipped levels.
+function buildOrgView(org){
+  const root = {id: 'ORG', type: 'org', code: org.code, name: org.name, org, children: [], parent: null};
+  for (const c of org.causes){
+    const cn = {id: `C:${c.key}`, type: 'cause', code: c.key, name: c.name, cause: c, org, children: [], parent: root};
+    root.children.push(cn);
+    const prefixes = state.map[mapKey(org, c)] || [];
+    // 4-char codes in the unit report are local codes (e.g. "UR01" reused by factories), not สายงาน risks.
+    const recs = state.records.filter(r => r.code.length > 4 && prefixes.some(p => r.code.startsWith(p)));
+    const byCode = new Map(); for (const r of recs) if (!byCode.has(r.code)) byCode.set(r.code, r);
+    const clones = new Map(), lines = new Map();
+    const clone = r => {
+      if (!clones.has(r.id)) clones.set(r.id, {...r, id: `${cn.id}/${r.id}`, children: [], parent: null});
+      return clones.get(r.id);
+    };
+    const attach = (node, parent, col) => {
+      let p = parent, pc = p.type === 'group' ? 2 : p.type === 'cause' ? 1 : colOf(p.code);
+      while (pc < col - 1){   // pass-through node keeps the child in its level's column
+        const gap = {id: `${node.id}/gap${pc}`, type: 'gap', children: [], parent: p};
+        p.children.push(gap); p = gap; pc++;
+      }
+      node.parent = p; p.children.push(node);
+    };
+    for (const r of recs){
+      let parent = null;
+      // หน่วยงาน codes (UR1810 + 20 / UR1810 + 201) vary in length, so only the 6-char ส่วนงาน prefix is a parent.
+      const p = r.code.length > 6 && byCode.get(r.code.slice(0, 6));
+      if (p) parent = clone(p);
+      if (!parent){
+        const key = r.code.slice(0, 4);
+        if (!lines.has(key)){
+          const g = state.all.get('G:' + key);
+          lines.set(key, {id: `${cn.id}/L:${key}`, type: 'group', code: key, name: g ? g.name : key, unit: '', children: [], parent: cn});
+          cn.children.push(lines.get(key));
+        }
+        parent = lines.get(key);
+      }
+      attach(clone(r), parent, Math.max(colOf(r.code), (parent.type === 'group' ? 2 : colOf(parent.code)) + 1));
+    }
+    const byCodeSort = (a, b) => (a.code || '').localeCompare(b.code || '', 'en', {numeric: true});
+    for (const n of [cn, ...descendants(cn)]) n.children.sort(byCodeSort);
+  }
+  return root;
+}
+function orgLevel(org){
+  const worst = d3.max(org.causes, c => (c.after || c.before || {score: 0}).score);
+  return levelOf(worst);
+}
+
+function refreshOrgPanel(){
+  const sec = document.getElementById('orgSec');
+  sec.hidden = !state.orgs.length;
+  if (!state.orgs.length) return;
+  const sel = document.getElementById('orgSel');
+  sel.innerHTML = '<option value="">ภาพรวมทั้งหมด (ไม่แยกปัจจัยองค์กร)</option>' +
+    state.orgs.map(o => `<option value="${esc(o.code)}">${esc(o.code)} ${esc(o.name)}</option>`).join('');
+  sel.value = state.orgCode;
+  const org = state.orgs.find(o => o.code === state.orgCode);
+  document.getElementById('causeList').innerHTML = org ? org.causes.map((c, i) => {
+    const m = state.map[mapKey(org, c)] || [];
+    return `<div class="cause"><b>${esc(c.key)}</b> ${esc(c.name)}
+      <div class="chips">${m.length ? m.map(p => `<span class="chip">${esc(p)}</span>`).join('') : '<span class="chip warn">ยังไม่ได้เชื่อมโยง</span>'}</div>
+      <button class="btn" data-ci="${i}">เชื่อมโยงปัจจัยเสี่ยง</button></div>`;
+  }).join('') : '';
+  document.querySelectorAll('#causeList [data-ci]').forEach(b => b.onclick = () => openMapDialog(org, org.causes[+b.dataset.ci]));
+}
+function applyView(){
+  refreshOrgPanel();
+  if (!state.records.length) return;
+  const org = state.orgs.find(o => o.code === state.orgCode);
+  setView(org ? buildOrgView(org) : state.overview);
+}
+
+let mapCtx = null;
+function openMapDialog(org, c){
+  if (!state.records.length){ toast('อัปโหลด PDF ผลระดับส่วนงาน/หน่วยงานก่อน'); return; }
+  mapCtx = {org, c};
+  const cur = new Set(state.map[mapKey(org, c)] || []);
+  const lines = state.overview.children.filter(g => g.id.startsWith('G:'));
+  document.getElementById('mapTitle').textContent = `${org.code} · ${c.key} ${c.name}`;
+  document.getElementById('mapList').innerHTML = lines.map(g => `<label class="opt"><input type="checkbox" value="${esc(g.code)}"${cur.has(g.code) ? ' checked' : ''}>
+    <span><b>${esc(g.code)}</b> ${esc(g.name)}<br><small style="color:#64748b">${descendants(g).length} ปัจจัยเสี่ยง · ${esc(g.unit)}</small></span></label>`).join('');
+  document.getElementById('mapExtra').value = [...cur].filter(p => !lines.some(g => g.code === p)).join(', ');
+  document.getElementById('mapFilter').value = '';
+  document.getElementById('mapDlg').showModal();
+}
+document.getElementById('mapFilter').oninput = e => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('#mapList label').forEach(l => l.hidden = q && !l.textContent.toLowerCase().includes(q));
+};
+document.getElementById('mapCancel').onclick = () => document.getElementById('mapDlg').close();
+document.getElementById('mapSave').onclick = () => {
+  const picked = [...document.querySelectorAll('#mapList input:checked')].map(i => i.value);
+  const extra = document.getElementById('mapExtra').value.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(s => /^[A-Z]+\d{4,}$/.test(s));
+  state.map[mapKey(mapCtx.org, mapCtx.c)] = [...new Set([...picked, ...extra])];
+  saveMap();
+  document.getElementById('mapDlg').close();
+  state.orgCode = mapCtx.org.code; applyView();
+};
+document.getElementById('orgSel').onchange = e => { state.orgCode = e.target.value; applyView(); };
+document.getElementById('mapExport').onclick = () =>
+  download(new Blob([JSON.stringify({type: 'risk-linkage-map', map: state.map}, null, 2)], {type: 'application/json'}), 'risk-linkage-map.json');
+document.getElementById('mapImport').onclick = () => fileInput.click();
+function descendants(n){ const out = []; const st = [...n.children]; while (st.length){ const c = st.pop(); out.push(c); st.push(...c.children); } return out; }
+function ancestors(n){ const out = []; for (let p = n.parent; p; p = p.parent) out.push(p); return out; }
+
+function filtersActive(){ return state.unit || state.levelOn.size < 6; }
+function matches(n){
+  if (n.type !== 'risk') return false;
+  if (state.unit && n.unit !== state.unit) return false;
+  return state.levelOn.has(current(n).level);
+}
+// Visible tree under filters: matching risks plus their ancestors (ancestors that don't match are drawn as ghosts).
+function visibleSet(){
+  if (!filtersActive()) return null;
+  const vis = new Set([state.view.id]);
+  for (const r of viewRisks()) if (matches(r)){ vis.add(r.id); for (const a of ancestors(r)) vis.add(a.id); }
+  return vis;
+}
+function stats(n){
+  const c = [0,0,0,0,0,0];
+  for (const d of descendants(n)) if (d.type === 'risk') c[current(d).level]++;
+  return c;
+}
+
+/* ---------- Rendering ---------- */
+
+const CW = 312, CH = 66, RW = 260, GAP_X = 70, GAP_Y = 14;
+const svg = d3.select('#svg');
+const viewport = svg.append('g');
+const gLanes = viewport.append('g'), gLinks = viewport.append('g'), gNodes = viewport.append('g');
+const COLS = ['ปัจจัยเสี่ยงองค์กร', 'สาเหตุความเสี่ยง', 'ปัจจัยเสี่ยงระดับสายงาน', 'ปัจจัยเสี่ยงระดับส่วนงาน', 'ปัจจัยเสี่ยงระดับหน่วยงาน'];
+const LANE_HEAD = 56, LANE_PAD = 18;
+const zoom = d3.zoom().scaleExtent([0.08, 2.5]).on('zoom', e => viewport.attr('transform', e.transform));
+svg.call(zoom).on('dblclick.zoom', null);
+
+const measureCtx = document.createElement('canvas').getContext('2d');
+function fit(text, px, weight, maxW){
+  measureCtx.font = `${weight} ${px}px ${getComputedStyle(document.body).fontFamily}`;
+  if (measureCtx.measureText(text).width <= maxW) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi){ const m = (lo + hi + 1) >> 1; if (measureCtx.measureText(text.slice(0, m) + '…').width <= maxW) lo = m; else hi = m - 1; }
+  return text.slice(0, lo).replace(/[ัิ-ฺ็-๎]+$/, '') + '…';
+}
+const fmt = v => v ? `${v.l}×${v.i}` : '–';
+const lv = k => LEVELS[k];
+
+let layoutRoot = null;
+function render(animateFrom){
+  const vis = visibleSet();
+  const kids = n => {
+    const ch = vis ? n.children.filter(c => vis.has(c.id)) : n.children;
+    return (state.expanded.has(n.id) || n.type === 'gap') && ch.length ? ch : null;
+  };
+  const h = d3.hierarchy(state.view, kids);
+  d3.tree().nodeSize([CH + GAP_Y, CW + GAP_X]).separation((a, b) => a.parent === b.parent ? 1 : 1.25)(h);
+  layoutRoot = h;
+  drawLanes(h);
+  const nodes = h.descendants(), links = h.links();
+  const src = animateFrom && nodes.find(n => n.data.id === animateFrom.id) || h;
+  // Animate only on expand/collapse; otherwise apply final positions synchronously (export relies on that).
+  const t = animateFrom ? viewport.transition('layout').duration(320) : null;   // named so it never interrupts zoom
+  const T = sel => t ? sel.transition(t) : sel;
+  const leave = exit => t ? exit.transition(t).attr('opacity', 0).remove() : exit.remove();
+
+  gNodes.selectAll('g.node').interrupt('layout');
+  gLinks.selectAll('path').interrupt('layout');
+
+  T(gLinks.selectAll('path').data(links, d => d.target.data.id).join(
+    enter => enter.append('path').attr('class', 'link').attr('d', () => linkPath(src, src)),
+    update => update, leave
+  ).attr('stroke', d => linkColor(d.target.data)).attr('opacity', d => vis && !matches(d.target.data) && d.target.data.type === 'risk' ? .35 : .7))
+   .attr('d', d => linkPath(d.source, d.target));
+
+  T(gNodes.selectAll('g.node').data(nodes, d => d.data.id).join(
+    enter => enter.append('g').attr('class', 'node').attr('transform', `translate(${src.y},${src.x - CH / 2})`)
+      .on('click', (e, d) => onNodeClick(d.data)),
+    update => update, leave
+  ).each(function(d){ drawCard(d3.select(this), d.data, vis); })
+   .classed('sel', d => state.selected === d.data.id)
+   .classed('ghost', d => !!vis && d.data.type === 'risk' && !matches(d.data)))
+   .attr('opacity', 1).attr('transform', d => `translate(${d.y},${d.x - CH / 2})`);
+}
+function nodeWidth(n){ return n.type === 'root' ? RW : CW; }
+function linkPath(s, t){
+  const sx = s.y + nodeWidth(s.data), sy = s.x, tx = t.y, ty = t.x, mx = (sx + tx) / 2;
+  return `M${sx},${sy}C${mx},${sy} ${mx},${ty} ${tx},${ty}` + (t.data && t.data.type === 'gap' ? `H${tx + CW}` : '');
+}
+// Column swimlanes with headers, plus a dashed band around each cause's branch (org view only).
+function laneBox(h){
+  const ns = h.descendants();
+  return {top: d3.min(ns, d => d.x) - CH / 2 - LANE_HEAD - LANE_PAD, bottom: d3.max(ns, d => d.x) + CH / 2 + LANE_PAD,
+    left: -LANE_PAD, right: (COLS.length - 1) * (CW + GAP_X) + CW + LANE_PAD};
+}
+function drawLanes(h){
+  gLanes.selectAll('*').remove();
+  if (state.view.type !== 'org') return;
+  const b = laneBox(h);
+  COLS.forEach((label, i) => {
+    const x = i * (CW + GAP_X) - LANE_PAD, w = CW + LANE_PAD * 2, org = i < 2;
+    gLanes.append('rect').attr('x', x).attr('y', b.top).attr('width', w).attr('height', b.bottom - b.top).attr('rx', 14)
+      .attr('fill', org ? '#e8eefc' : '#eef1f5');
+    gLanes.append('rect').attr('x', x).attr('y', b.top).attr('width', w).attr('height', LANE_HEAD - 12).attr('rx', 14)
+      .attr('fill', org ? '#0b2a5b' : '#334155');
+    gLanes.append('text').attr('x', x + w / 2).attr('y', b.top + 28).attr('text-anchor', 'middle').attr('fill', '#fff')
+      .attr('font-size', 14).attr('font-weight', 600).text(label);
+  });
+  for (const c of h.children || []){
+    const xs = c.descendants().map(d => d.x);
+    gLanes.append('rect').attr('x', CW + GAP_X - LANE_PAD / 2).attr('y', d3.min(xs) - CH / 2 - 7)
+      .attr('width', b.right - (CW + GAP_X) - LANE_PAD / 2).attr('height', d3.max(xs) - d3.min(xs) + CH + 14).attr('rx', 12)
+      .attr('fill', 'none').attr('stroke', '#94a3b8').attr('stroke-dasharray', '5 4');
+  }
+}
+function linkColor(n){
+  if (n.type === 'risk') return lv(current(n).level).color;
+  const c = stats(n); const worst = [5,4,3,2,1].find(k => c[k]);
+  return worst ? lv(worst).color : '#cbd5e1';
+}
+
+function drawCard(g, n, vis){
+  g.selectAll('*').remove();
+  if (n.type === 'gap') return;
+  const total = vis ? descendants(n).filter(d => vis.has(d.id) && d.type !== 'gap').length : descendants(n).filter(d => d.type !== 'gap').length;
+  if (n.type === 'org' || n.type === 'cause'){ drawOrgCard(g, n); return; }
+  const hidden = !state.expanded.has(n.id) && (vis ? n.children.some(c => vis.has(c.id)) : n.children.length);
+  if (n.type === 'root'){
+    const c = stats(n);
+    g.append('rect').attr('width', RW).attr('height', CH).attr('rx', 12).attr('fill', '#0b2a5b');
+    g.append('text').attr('x', 16).attr('y', 26).attr('fill', '#fff').attr('font-size', 15).attr('font-weight', 600).text(n.name);
+    g.append('text').attr('x', 16).attr('y', 46).attr('fill', '#c7d2fe').attr('font-size', 12)
+      .text(`${viewRisks().length} ปัจจัยเสี่ยง · ${MONTH_LABEL()}`);
+    distBar(g, c, 16, 54, RW - 32, 4);
+  } else if (n.type === 'group'){
+    const c = stats(n);
+    g.append('rect').attr('class', 'card').attr('width', CW).attr('height', CH).attr('rx', 12).style('fill', '#f1f5f9');
+    g.append('text').attr('x', 16).attr('y', 24).attr('font-size', 14).attr('font-weight', 600).attr('fill', '#0f172a').text(fit(n.name, 14, 600, CW - 40));
+    g.append('text').attr('x', 16).attr('y', 43).attr('font-size', 12).attr('fill', '#475569')
+      .text(fit(n.id.startsWith('U:') ? `${total} รายการ · รหัสระดับหน่วยงาน` : [n.code, `${total} รายการ`, n.unit].filter(Boolean).join(' · '), 12, 400, CW - 40));
+    distBar(g, c, 16, 52, CW - 32, 5);
+  } else {
+    const cur = current(n), L = lv(cur.level);
+    g.append('rect').attr('class', 'card').attr('width', CW).attr('height', CH).attr('rx', 12);
+    g.append('path').attr('d', `M12,0V${CH}A12,12 0 0 1 0,${CH - 12}V12A12,12 0 0 1 12,0Z`).attr('fill', L.color);
+    const tx = 22, maxW = CW - tx - 58;
+    g.append('text').attr('x', tx).attr('y', 19).attr('font-size', 11).attr('fill', '#64748b')
+      .call(t => { t.append('tspan').attr('font-weight', 700).attr('fill', '#334155').text(n.code); t.append('tspan').text(fit('  ·  ' + n.unit, 11, 400, maxW - n.code.length * 7.5)); });
+    g.append('text').attr('x', tx).attr('y', 38).attr('font-size', 13).attr('font-weight', 500).attr('fill', '#0f172a').text(fit(n.name, 13, 500, maxW));
+    const line3 = g.append('text').attr('x', tx).attr('y', 56).attr('font-size', 11).attr('fill', '#64748b');
+    line3.append('tspan').text(cur.k >= 0 ? `ผล ${MONTHS[cur.k]} ${fmt(cur.res)}  ·  แผน ${fmt(cur.plan)}` : 'ยังไม่มีผล');
+    if (cur.over) line3.append('tspan').attr('fill', '#dc2626').attr('font-weight', 600).text('  ▲ เกินแผน');
+    g.append('circle').attr('cx', CW - 30).attr('cy', CH / 2).attr('r', 19).attr('fill', L.color);
+    g.append('text').attr('x', CW - 30).attr('y', CH / 2 + 6).attr('text-anchor', 'middle').attr('font-size', 17).attr('font-weight', 700)
+      .attr('fill', L.text).text(cur.res ? cur.res.score : '–');
+    g.append('title').text(`${n.code} ${n.name}\n${n.unit}\nระดับ: ${L.name}`);
+  }
+  if (hidden){
+    const w = nodeWidth(n);
+    g.append('circle').attr('cx', w).attr('cy', CH / 2).attr('r', 13).attr('fill', '#fff').attr('stroke', '#94a3b8');
+    g.append('text').attr('x', w).attr('y', CH / 2 + 4).attr('text-anchor', 'middle').attr('font-size', 10).attr('font-weight', 700).attr('fill', '#334155')
+      .text(`+${total > 99 ? '99' : total}`);
+  }
+}
+// Org risk / cause card: colored by the Excel's after-mitigation level (falls back to before).
+function drawOrgCard(g, n){
+  const isOrg = n.type === 'org', c = n.cause;
+  const v = isOrg ? null : (c.after || c.before);
+  const L = lv(isOrg ? orgLevel(n.org) : levelOf(v && v.score));
+  const unmapped = !isOrg && !(state.map[mapKey(n.org, c)] || []).length;
+  g.append('rect').attr('class', 'card').attr('width', CW).attr('height', CH).attr('rx', 12).style('fill', isOrg ? '#0b2a5b' : '#fff');
+  g.append('path').attr('d', `M12,0V${CH}A12,12 0 0 1 0,${CH - 12}V12A12,12 0 0 1 12,0Z`).attr('fill', L.color);
+  const tx = 22, maxW = CW - tx - 58, ink = isOrg ? '#fff' : '#0f172a', sub = isOrg ? '#c7d2fe' : '#64748b';
+  g.append('text').attr('x', tx).attr('y', 19).attr('font-size', 11).attr('fill', sub)
+    .text(fit(isOrg ? `${n.code} · ${n.org.period}` : `${c.key} · ${c.owner}`, 11, 400, maxW));
+  g.append('text').attr('x', tx).attr('y', 38).attr('font-size', 13).attr('font-weight', 600).attr('fill', ink).text(fit(n.name, 13, 600, maxW));
+  const l3 = g.append('text').attr('x', tx).attr('y', 56).attr('font-size', 11).attr('fill', unmapped ? '#b45309' : sub);
+  if (isOrg) l3.text(`${n.org.causes.length} สาเหตุ · ${viewRisks().length} ปัจจัยเสี่ยงที่เชื่อมโยง`);
+  else if (unmapped) l3.text('⚠ ยังไม่ได้เชื่อมโยง — คลิกเพื่อกำหนด');
+  else l3.text(`ก่อน ${fmt(c.before)}${c.before ? '=' + c.before.score : ''} → หลัง ${fmt(c.after)}${c.after ? '=' + c.after.score : ''}`);
+  const score = isOrg ? d3.max(n.org.causes, x => (x.after || x.before || {score: 0}).score) : v && v.score;
+  g.append('circle').attr('cx', CW - 30).attr('cy', CH / 2).attr('r', 19).attr('fill', L.color);
+  g.append('text').attr('x', CW - 30).attr('y', CH / 2 + 6).attr('text-anchor', 'middle').attr('font-size', 17).attr('font-weight', 700)
+    .attr('fill', L.text).text(score || '–');
+  g.append('title').text(isOrg ? `${n.code} ${n.name}` : `${c.key} ${c.name}\nเจ้าของ: ${c.owner}\nคลิกเพื่อกำหนดการเชื่อมโยง`);
+}
+function distBar(g, c, x, y, w, h){
+  const sum = c.reduce((a, b) => a + b, 0) || 1; let cx = x;
+  for (const k of [5,4,3,2,1,0]){ if (!c[k]) continue; const ww = w * c[k] / sum;
+    g.append('rect').attr('x', cx).attr('y', y).attr('width', ww).attr('height', h).attr('fill', lv(k).color); cx += ww; }
+}
+const MONTH_LABEL = () => state.month === 'latest' ? 'ผลล่าสุด' : 'ผลเดือน ' + MONTHS[+state.month];
+
+function onNodeClick(n){
+  if (n.type === 'cause'){ openMapDialog(n.org, n.cause); return; }
+  const vis = visibleSet();
+  const hasKids = vis ? n.children.some(c => vis.has(c.id)) : n.children.length;
+  if (hasKids){ state.expanded.has(n.id) ? state.expanded.delete(n.id) : state.expanded.add(n.id); }
+  if (n.type === 'risk') select(n.id, false); else render(n);
+  if (hasKids && n.type === 'risk') render(n);
+}
+function select(id, reveal = true){
+  state.selected = id;
+  const n = state.byId.get(id);
+  if (reveal){
+    for (const a of ancestors(n)) state.expanded.add(a.id);
+    const vis = visibleSet();
+    if (vis && !vis.has(id)){ state.unit = ''; state.levelOn = new Set([0,1,2,3,4,5]); syncFilters(); }
+    render(n);
+    const d = layoutRoot.descendants().find(d => d.data.id === id);
+    if (d){ const k = Math.max(d3.zoomTransform(svg.node()).k, .8); const r = svg.node().getBoundingClientRect();
+      const w = r.width > 900 ? r.width - 440 : r.width;   // keep clear of the detail panel
+      svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity.translate(w / 2 - (d.y + CW / 2) * k, r.height / 2 - d.x * k).scale(k)); }
+  } else render();
+  showDetail(n);
+}
+function layoutBounds(){
+  const ns = layoutRoot.descendants();
+  const x0 = d3.min(ns, d => d.y), x1 = d3.max(ns, d => d.y + nodeWidth(d.data) + 14);
+  const y0 = d3.min(ns, d => d.x - CH / 2), y1 = d3.max(ns, d => d.x + CH / 2);
+  if (state.view.type === 'org'){ const l = laneBox(layoutRoot); return {x: l.left, y: l.top, width: l.right - l.left, height: l.bottom - l.top}; }
+  return {x: x0, y: y0, width: x1 - x0, height: y1 - y0};
+}
+function fitView(dur = 400){
+  if (!layoutRoot) return;
+  const b = layoutBounds();
+  const r = svg.node().getBoundingClientRect(), pad = 40;
+  const k = Math.min(1.1, Math.min((r.width - pad * 2) / b.width, (r.height - pad * 2) / b.height));
+  const tf = d3.zoomIdentity.translate(r.width / 2 - (b.x + b.width / 2) * k, r.height / 2 - (b.y + b.height / 2) * k).scale(k);
+  dur ? svg.transition().duration(dur).call(zoom.transform, tf) : svg.call(zoom.transform, tf);
+}
+
+/* ---------- Detail panel ---------- */
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function cellHtml(v){
+  if (!v) return '<td style="color:#94a3b8">–</td>';
+  const L = lv(levelOf(v.score));
+  return `<td style="background:${L.color};color:${L.text};font-weight:600">${v.l}×${v.i}</td>`;
+}
+function showDetail(n){
+  const el = document.getElementById('detail');
+  const cur = current(n), L = lv(cur.level);
+  const path = ancestors(n).reverse().filter(a => a.type === 'risk');
+  el.innerHTML = `
+    <div class="dhead" style="border-top:5px solid ${L.color}">
+      <button class="x" id="dClose" aria-label="ปิด">×</button>
+      <code>${esc(n.code)}${n.no ? ' · ลำดับ ' + esc(n.no) : ''}</code>
+      <h2>${esc(n.name)}</h2>
+      <span class="pill" style="background:${L.color};color:${L.text}">${L.name}${cur.res ? ' · ' + cur.res.score : ''}</span>
+      ${cur.over ? '<span class="pill" style="background:#fee2e2;color:#b91c1c;margin-left:6px">▲ ผลเกินแผน</span>' : ''}
+    </div>
+    <div class="dbody">
+      <div><h4>ผู้รับผิดชอบ</h4>${esc(n.unit)}</div>
+      ${path.length ? `<div><h4>เชื่อมโยงกับปัจจัยเสี่ยงระดับบน</h4><div class="crumbs">${path.map(a =>
+        `<a data-id="${esc(a.id)}">${esc(a.code)} ${esc(a.name)}</a><span>›</span>`).join('')}<span>${esc(n.code)}</span></div></div>` : ''}
+      <div><h4>แผน / ผล รายเดือน</h4>
+        <table class="months"><tr><th class="lab"></th>${MONTHS.map((m, k) => `<th${k === cur.k ? ' style="background:#dbeafe;color:#1e3a8a"' : ''}>${m}</th>`).join('')}</tr>
+        <tr><td class="lab">แผน</td>${n.plan.map(cellHtml).join('')}</tr>
+        <tr><td class="lab">ผล</td>${n.result.map(cellHtml).join('')}</tr></table></div>
+      ${n.children.length ? `<div class="kids"><h4>ปัจจัยเสี่ยงที่เชื่อมโยงระดับล่าง (${n.children.length})</h4>${n.children.map(c => {
+        const cc = current(c); return `<div data-id="${esc(c.id)}"><span class="dot" style="background:${lv(cc.level).color}"></span><span><b>${esc(c.code)}</b> ${esc(c.name)}<br><small style="color:#64748b">${esc(c.unit)}</small></span></div>`;
+      }).join('')}</div>` : ''}
+    </div>`;
+  el.classList.add('open');
+  el.querySelector('#dClose').onclick = () => { el.classList.remove('open'); state.selected = null; render(); };
+  el.querySelectorAll('[data-id]').forEach(a => a.onclick = () => select(a.dataset.id));
+}
+
+/* ---------- Sidebar ---------- */
+
+function rangeText(k){
+  const t = state.th;
+  return k === 0 ? '' : k === 1 ? `1–${t[0]}` : k === 5 ? `${t[3] + 1}–25` : `${t[k - 2] + 1}–${t[k - 1]}`;
+}
+function refreshSidebar(){
+  const c = [0,0,0,0,0,0]; let over = 0;
+  const risks = state.view ? viewRisks() : [];
+  for (const r of risks){ const cur = current(r); c[cur.level]++; if (cur.over) over++; }
+  document.getElementById('stTotal').textContent = risks.length;
+  document.getElementById('stUnits').textContent = state.units.length;
+  document.getElementById('stOver').textContent = over;
+  document.getElementById('stNone').textContent = c[0];
+  const sum = risks.length || 1;
+  document.getElementById('distBar').innerHTML = [5,4,3,2,1,0].filter(k => c[k])
+    .map(k => `<span style="width:${100 * c[k] / sum}%;background:${lv(k).color}" title="${lv(k).name} ${c[k]}"></span>`).join('');
+  document.getElementById('levels').innerHTML = [5,4,3,2,1,0].map(k => `
+    <div class="lvl${state.levelOn.has(k) ? '' : ' off'}" data-k="${k}">
+      <span class="sw" style="background:${lv(k).color}"></span><span class="nm">${lv(k).name} <span class="rg">${rangeText(k)}</span></span><span class="ct">${c[k]}</span>
+    </div>`).join('');
+  document.querySelectorAll('.lvl').forEach(el => el.onclick = e => {
+    const k = +el.dataset.k;
+    if (e.shiftKey || e.ctrlKey || e.metaKey){ state.levelOn.has(k) ? state.levelOn.delete(k) : state.levelOn.add(k); }
+    else if (state.levelOn.size === 1 && state.levelOn.has(k)) state.levelOn = new Set([0,1,2,3,4,5]);
+    else state.levelOn = new Set([k]);
+    onFilterChange();
+  });
+}
+function syncFilters(){ document.getElementById('unitSel').value = state.unit; refreshSidebar(); }
+function onFilterChange(){
+  refreshSidebar();
+  const vis = visibleSet();
+  state.expanded = baseExpanded();
+  if (vis) for (const id of vis) state.expanded.add(id);
+  render(); fitView();
+}
+function buildThGrid(){
+  const names = ['ต่ำมาก ≤', 'ต่ำ ≤', 'ปานกลาง ≤', 'สูง ≤'];
+  const grid = document.getElementById('thGrid');
+  grid.innerHTML = names.map((nm, i) => `<span><span class="sw" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${lv(i + 1).color}"></span> ${nm}</span><input type="number" min="1" max="24" data-i="${i}" value="${state.th[i]}">`).join('')
+    + `<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${lv(5).color}"></span> สูงมาก</span><span style="font-size:12px;color:var(--ink-2)">ที่เหลือ</span>`;
+  grid.querySelectorAll('input').forEach(inp => inp.onchange = () => {
+    const v = grid.querySelectorAll('input'); const th = [...v].map(x => +x.value);
+    if (th.some((x, i) => !(x >= 1 && x <= 24) || (i && x <= th[i - 1]))){ toast('เกณฑ์ต้องเรียงจากน้อยไปมาก (1–24)'); buildThGrid(); return; }
+    state.th = th; saveTh(); refreshSidebar(); render();
+    if (state.selected) showDetail(state.byId.get(state.selected));
+  });
+}
+
+/* ---------- Search ---------- */
+
+const qEl = document.getElementById('q'), resEl = document.getElementById('results');
+let hits = [], act = 0;
+qEl.addEventListener('input', () => {
+  const q = qEl.value.trim().toLowerCase();
+  hits = q ? viewRisks().filter(r => r.code.toLowerCase().includes(q) || r.name.toLowerCase().includes(q) || r.unit.toLowerCase().includes(q)).slice(0, 40) : [];
+  act = 0; drawHits();
+});
+qEl.addEventListener('keydown', e => {
+  if (!hits.length) return;
+  if (e.key === 'ArrowDown'){ act = (act + 1) % hits.length; drawHits(); e.preventDefault(); }
+  else if (e.key === 'ArrowUp'){ act = (act - 1 + hits.length) % hits.length; drawHits(); e.preventDefault(); }
+  else if (e.key === 'Enter'){ pick(hits[act]); }
+  else if (e.key === 'Escape'){ hits = []; drawHits(); }
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search')) resEl.classList.remove('open'); });
+function drawHits(){
+  resEl.innerHTML = hits.length ? hits.map((r, i) => `<div class="${i === act ? 'act' : ''}" data-i="${i}"><span class="dot" style="background:${lv(current(r).level).color}"></span><span><code>${esc(r.code)}</code> ${esc(r.name)}</span></div>`).join('')
+    : (qEl.value.trim() ? '<div style="cursor:default;color:#94a3b8">ไม่พบรายการ</div>' : '');
+  resEl.classList.toggle('open', !!qEl.value.trim());
+  resEl.querySelectorAll('[data-i]').forEach(el => el.onclick = () => pick(hits[+el.dataset.i]));
+}
+function pick(r){ resEl.classList.remove('open'); select(r.id); }
+
+/* ---------- Export ---------- */
+
+let fontCss = null;
+async function embeddedFontCss(){
+  if (fontCss !== null) return fontCss;
+  try {
+    const css = await (await fetch('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap')).text();
+    const urls = [...new Set([...css.matchAll(/url\((https:[^)]+)\)/g)].map(m => m[1]))];
+    let out = css;
+    await Promise.all(urls.map(async u => {
+      const b = await (await fetch(u)).blob();
+      const data = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
+      out = out.split(u).join(data);
+    }));
+    fontCss = out;
+  } catch { fontCss = ''; }
+  return fontCss;
+}
+async function exportCanvas(){
+  render();                           // settle any running animation into final positions
+  const b = layoutBounds();
+  const pad = 32, headH = 92;
+  const W = Math.ceil(Math.max(b.width + pad * 2, 760)), H = Math.ceil(b.height + pad * 2 + headH);
+  const clone = viewport.node().cloneNode(true);
+  clone.setAttribute('transform', `translate(${pad - b.x},${pad + headH - b.y})`);
+  const css = await embeddedFontCss();
+  const legend = [5,4,3,2,1,0].map((k, i) => `<g transform="translate(${pad + i * 112},70)"><rect width="12" height="12" rx="3" fill="${lv(k).color}"/><text x="18" y="11" font-size="12" fill="#334155">${lv(k).name} ${rangeText(k)}</text></g>`).join('');
+  const now = new Date().toLocaleDateString('th-TH', {year: 'numeric', month: 'long', day: 'numeric'});
+  const filt = [state.unit && 'หน่วยงาน: ' + state.unit, state.levelOn.size < 6 && 'ระดับ: ' + [...state.levelOn].map(k => lv(k).name).join(', ')].filter(Boolean).join(' · ');
+  const xml = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <style>${css} text{font-family:"Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif} .link{fill:none;stroke-width:1.6} .card{fill:#fff;stroke:#d8dee8} .node.sel .card{stroke:#1d4ed8;stroke-width:2.5} .ghost{opacity:.45}</style>
+    <rect width="100%" height="100%" fill="#fff"/>
+    <text x="${pad}" y="34" font-size="20" font-weight="700" fill="#0b2a5b">${esc(viewTitle())}</text>
+    <text x="${pad}" y="56" font-size="12" fill="#64748b">${state.view.type === 'org' ? `ปัจจัยเสี่ยงองค์กร: ${esc(state.view.org.period)} · ` : ''}${esc(state.file)} · ${MONTH_LABEL()}${filt ? ' · ' + esc(filt) : ''} · สร้างเมื่อ ${now}</text>
+    ${legend}
+    ${new XMLSerializer().serializeToString(clone)}
+  </svg>`;
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+  await img.decode();
+  // Vertical extents of every card in export coordinates, so page breaks can avoid cutting through one.
+  const spans = layoutRoot.descendants().map(d => [d.x - CH / 2 + pad + headH - b.y, d.x + CH / 2 + pad + headH - b.y]);
+  return {img, W, H, spans};
+}
+// Draws rows [y0, y0+h) of the export image onto a canvas at the given scale.
+function tile(img, W, y0, h, scale){
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(W * scale); cv.height = Math.round(h * scale);
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.scale(scale, scale); ctx.drawImage(img, 0, -y0);
+  return cv;
+}
+const toBlob = (cv, type, q) => new Promise(r => cv.toBlob(r, type, q));
+function pageBreaks(H, pageH, spans){
+  const out = [];
+  for (let y = 0; y < H;){
+    let end = Math.min(H, y + pageH);
+    if (end < H){
+      for (let moved = true; moved;){
+        moved = false;
+        for (const [a, z] of spans) if (a < end && z > end && a - 8 > y + pageH * 0.5){ end = a - 8; moved = true; }
+      }
+    }
+    out.push([y, end]); y = end;
+  }
+  return out;
+}
+const baseName = () => state.view.type === 'org' ? `Diagram-${state.view.code}` : (state.file.replace(/\.pdf$/i, '') || 'risk') + '-diagram';
+function download(blob, name){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+async function withBusy(btn, fn){
+  const t = btn.textContent; btn.disabled = true; btn.textContent = 'กำลังสร้าง…';
+  try { await fn(); } catch (e){ console.error(e); toast('Export ไม่สำเร็จ: ' + e.message); } finally { btn.disabled = false; btn.textContent = t; }
+}
+document.getElementById('pngBtn').onclick = e => withBusy(e.currentTarget, async () => {
+  const {img, W, H} = await exportCanvas();
+  // Largest scale (≤2×) the browser canvas allows; retry smaller if the browser refuses the size.
+  let scale = Math.min(2, 32000 / W, 32000 / H, Math.sqrt(250e6 / (W * H))), blob = null;
+  while (!blob && scale > 0.2){ blob = await toBlob(tile(img, W, 0, H, scale), 'image/png'); if (!blob) scale *= 0.7; }
+  if (!blob) throw new Error('Diagram ใหญ่เกินไป ลองย่อบางกิ่งก่อน');
+  download(blob, baseName() + '.png'); toast('บันทึก PNG แล้ว');
+});
+document.getElementById('pdfBtn').onclick = e => withBusy(e.currentTarget, async () => {
+  const {img, W, H, spans} = await exportCanvas();
+  const {jsPDF} = window.jspdf;
+  const PT = 0.75, scale = Math.min(1.6, 14000 / W);
+  // Tall diagrams are split into A-series portrait pages (√2 ratio) instead of one endless page.
+  const pageH = W * Math.SQRT2, single = H <= pageH * 1.15;
+  const pages = single ? [[0, H]] : pageBreaks(H, pageH, spans);
+  const fmt = single ? [W * PT, H * PT] : [W * PT, pageH * PT];
+  const pdf = new jsPDF({orientation: fmt[0] >= fmt[1] ? 'landscape' : 'portrait', unit: 'pt', format: fmt, compress: true});
+  pages.forEach(([y0, y1], i) => {
+    if (i) pdf.addPage(fmt, fmt[0] >= fmt[1] ? 'landscape' : 'portrait');
+    const cv = tile(img, W, y0, y1 - y0, scale);
+    pdf.addImage(cv.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, W * PT, (y1 - y0) * PT);
+    if (pages.length > 1){ pdf.setFontSize(9); pdf.setTextColor(148, 163, 184); pdf.text(`${i + 1} / ${pages.length}`, W * PT - 24, fmt[1] - 14, {align: 'right'}); }
+  });
+  download(pdf.output('blob'), baseName() + '.pdf'); toast(`บันทึก PDF แล้ว (${pages.length} หน้า)`);
+});
+
+/* ---------- Wiring ---------- */
+
+function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2600); }
+
+const fileInput = document.getElementById('fileInput'), drop = document.getElementById('drop');
+document.getElementById('uploadBtn').onclick = () => fileInput.click();
+drop.onclick = () => fileInput.click();
+fileInput.onchange = () => { loadFiles([...fileInput.files]); fileInput.value = ''; };
+['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); if (ev === 'drop' || !e.relatedTarget) drop.classList.remove('over'); }));
+document.addEventListener('drop', e => loadFiles([...e.dataTransfer.files]));
+
+// Accepts any mix of: unit-level PDF, org-level Excel, saved linkage map (.json). Excel/JSON first so the PDF view lands on an org.
+async function loadFiles(files){
+  const rank = f => /\.pdf$/i.test(f.name) ? 2 : 1;
+  for (const f of files.sort((a, b) => rank(a) - rank(b))){
+    try {
+      if (/\.xlsx$/i.test(f.name)) await loadOrgXlsx(await f.arrayBuffer(), f.name);
+      else if (/\.json$/i.test(f.name)) loadMapJson(await f.text());
+      else if (/\.pdf$/i.test(f.name)) await loadPdf(await f.arrayBuffer(), f.name);
+      else toast('รองรับไฟล์ .pdf, .xlsx, .json เท่านั้น');
+    } catch (e){ console.error(e); toast(`อ่านไฟล์ ${f.name} ไม่สำเร็จ: ${e.message}`); }
+  }
+}
+async function loadOrgXlsx(buf, name){
+  const orgs = parseOrgXlsx(buf);
+  if (!orgs.length) throw new Error('ไม่พบชีตผลปัจจัยเสี่ยงองค์กร (ต้องมี "ปัจจัยเสี่ยงระดับองค์กร" และ "สาเหตุความเสี่ยง")');
+  state.orgs = orgs; state.orgFile = name;
+  if (!orgs.some(o => o.code === state.orgCode)) state.orgCode = orgs[0].code;
+  showLoaded(); applyView();
+  toast(`อ่านปัจจัยเสี่ยงองค์กรได้ ${orgs.length} รายการ (${d3.sum(orgs, o => o.causes.length)} สาเหตุ)`);
+}
+function loadMapJson(text){
+  const j = JSON.parse(text);
+  if (j.type !== 'risk-linkage-map' || typeof j.map !== 'object') throw new Error('ไม่ใช่ไฟล์การเชื่อมโยง');
+  state.map = j.map; saveMap(); applyView(); toast('โหลดการเชื่อมโยงแล้ว');
+}
+function showLoaded(){
+  document.getElementById('loaded').innerHTML = [
+    state.file ? `✓ ส่วนงาน/หน่วยงาน: ${esc(state.file)}` : '○ ยังไม่มี PDF ผลระดับส่วนงาน/หน่วยงาน',
+    state.orgFile ? `✓ ปัจจัยเสี่ยงองค์กร: ${esc(state.orgFile)}` : '○ ยังไม่มี Excel ผลปัจจัยเสี่ยงองค์กร'].join('<br>');
+  document.getElementById('fileName').textContent = [state.file, state.orgFile].filter(Boolean).join(' + ');
+}
+async function loadPdf(buf, name){
+  const empty = document.getElementById('empty'), prog = document.getElementById('prog'), err = document.getElementById('err');
+  empty.hidden = false; prog.style.display = 'block'; err.textContent = '';
+  document.getElementById('detail').classList.remove('open');
+  try {
+    const out = await parsePdf(buf, (f, p, n) => {
+      document.getElementById('progFill').style.width = (f * 100) + '%';
+      document.getElementById('progText').textContent = `กำลังอ่านหน้า ${p} / ${n}`;
+    });
+    if (!out.records.length) throw new Error('ไม่พบตารางผลการบริหารความเสี่ยงในไฟล์นี้ (ต้องเป็น PDF ที่มีข้อความ ไม่ใช่ภาพสแกน)');
+    state.file = name;
+    buildModel(out.records);
+    const latest = Math.max(...state.records.map(r => { for (let k = 11; k >= 0; k--) if (r.result[k]) return k; return -1; }));
+    document.getElementById('monthSel').innerHTML = `<option value="latest">ผลล่าสุดของแต่ละรายการ</option>` + MONTHS.map((m, k) => `<option value="${k}">${m}${k === latest ? ' (ล่าสุด)' : ''}</option>`).join('');
+    state.month = 'latest';
+    document.getElementById('pngBtn').disabled = document.getElementById('pdfBtn').disabled = false;
+    document.getElementById('zoombar').hidden = false;
+    empty.hidden = true; prog.style.display = 'none';
+    showLoaded(); applyView();
+    toast(`อ่านได้ ${state.records.length} ปัจจัยเสี่ยง จาก ${out.pages} หน้า` + (out.warnings.length ? ` (ข้าม ${out.warnings.length} แถว)` : ''));
+    if (out.warnings.length) console.warn(out.warnings);
+  } catch (e){
+    console.error(e); prog.style.display = 'none'; err.textContent = e.message || String(e);
+  }
+}
+
+document.getElementById('unitSel').onchange = e => { state.unit = e.target.value; onFilterChange(); };
+document.getElementById('monthSel').onchange = e => { state.month = e.target.value; refreshSidebar(); render(); if (state.selected) showDetail(state.byId.get(state.selected)); };
+document.getElementById('expandAll').onclick = () => {
+  const vis = visibleSet();
+  state.expanded = new Set([...state.byId.values()].filter(n => n.children.length && (!vis || vis.has(n.id))).map(n => n.id));
+  render(); fitView();
+};
+document.getElementById('collapseAll').onclick = () => { state.expanded = baseExpanded(); render(); fitView(); };
+// Causes stay open in the org view: clicking a cause edits its linkage instead of toggling it.
+function baseExpanded(){ return new Set([state.view.id, ...(state.view.type === 'org' ? state.view.children.map(c => c.id) : [])]); }
+document.getElementById('thReset').onclick = () => { state.th = [...DEFAULT_TH]; saveTh(); buildThGrid(); refreshSidebar(); if (state.records.length) render(); };
+document.getElementById('zIn').onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1.3);
+document.getElementById('zOut').onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1 / 1.3);
+document.getElementById('zFit').onclick = () => fitView();
+document.getElementById('menuBtn').onclick = () => document.getElementById('side').classList.toggle('open');
+
+buildThGrid(); refreshSidebar();
+window.riskApp = {loadPdf, loadOrgXlsx, state};
+</script>
+</body>
+</html>
